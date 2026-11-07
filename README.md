@@ -1,6 +1,7 @@
 # DevToys CLI
 
 [![CI](https://github.com/PloxiQ/DevToys-CLI/actions/workflows/ci.yml/badge.svg)](https://github.com/PloxiQ/DevToys-CLI/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/PloxiQ/DevToys-CLI?sort=semver)](https://github.com/PloxiQ/DevToys-CLI/releases/latest)
 [![Rust](https://img.shields.io/badge/rust-2021-orange?logo=rust)](https://www.rust-lang.org)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![GitHub stars](https://img.shields.io/github/stars/PloxiQ/DevToys-CLI?style=social)](https://github.com/PloxiQ/DevToys-CLI)
@@ -54,6 +55,19 @@ Run `devtoys` (or `devtoys tui`) with no arguments to open the TUI.
 - **Small and fast** — size-optimized release profile with LTO, `opt-level = "z"` and symbol stripping.
 
 ## Installation
+
+### Prebuilt binaries
+
+Download the latest archive from [GitHub Releases](https://github.com/PloxiQ/DevToys-CLI/releases/latest):
+
+| Platform | Asset |
+| --- | --- |
+| Windows x86_64 | `devtoys-vX.Y.Z-x86_64-pc-windows-msvc.zip` |
+| Linux x86_64 | `devtoys-vX.Y.Z-x86_64-unknown-linux-gnu.tar.gz` |
+| macOS Apple Silicon | `devtoys-vX.Y.Z-aarch64-apple-darwin.tar.gz` |
+| macOS Intel | `devtoys-vX.Y.Z-x86_64-apple-darwin.tar.gz` |
+
+Each archive contains the `devtoys` binary, `README.md` and `LICENSE`. Verify downloads with the `SHA256SUMS` file attached to every release.
 
 ### Build from source
 
@@ -379,6 +393,27 @@ cargo test --no-default-features
 ```
 
 Open a pull request with a short description of the tool, the flags you added and the tests you ran. Screenshots of new TUI screens are appreciated.
+
+## Releasing
+
+The release workflow in `.github/workflows/release.yml` builds archives for Windows, Linux, and macOS whenever a version tag is pushed.
+
+1. Update `version` in `Cargo.toml` and commit the change.
+2. Push a matching tag:
+
+   ```bash
+   git tag -a v0.1.0 -m "DevToys CLI v0.1.0"
+   git push origin v0.1.0
+   ```
+
+3. GitHub Actions builds the four platform archives, generates `SHA256SUMS`, and publishes a GitHub Release with generated notes.
+4. Publish the crate separately when ready:
+
+   ```bash
+   cargo publish
+   ```
+
+Tags that do not match the version in `Cargo.toml` are rejected by the workflow.
 
 ## License
 
