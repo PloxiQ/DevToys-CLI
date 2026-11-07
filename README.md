@@ -1,16 +1,47 @@
 # DevToys CLI
 
-[![CI](https://github.com/PloxiQ/DevToys-CLI/actions/workflows/ci.yml/badge.svg)](https://github.com/PloxiQ/DevToys-CLI/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/PloxiQ/DevToys-CLI?sort=semver)](https://github.com/PloxiQ/DevToys-CLI/releases/latest)
-[![Rust](https://img.shields.io/badge/rust-2021-orange?logo=rust)](https://www.rust-lang.org)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![GitHub stars](https://img.shields.io/github/stars/PloxiQ/DevToys-CLI?style=social)](https://github.com/PloxiQ/DevToys-CLI)
+<p align="center">
+  <img src="docs/assets/banner.png" alt="DevToys CLI — 20 offline developer tools in one tiny Rust binary" width="100%">
+</p>
 
-**A fast, offline developer toolbox for the terminal.** DevToys CLI packs 20 everyday utilities into one small Rust binary: a keyboard-first TUI when you want to explore, and a script-friendly CLI when you need to get things done.
+<p align="center">
+  <a href="https://github.com/PloxiQ/DevToys-CLI/actions/workflows/ci.yml"><img src="https://github.com/PloxiQ/DevToys-CLI/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/PloxiQ/DevToys-CLI/releases/latest"><img src="https://img.shields.io/github/v/release/PloxiQ/DevToys-CLI?sort=semver" alt="Latest release"></a>
+  <a href="https://www.rust-lang.org"><img src="https://img.shields.io/badge/rust-1.89%2B-orange?logo=rust" alt="Rust 1.89+"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT license"></a>
+  <a href="https://github.com/PloxiQ/DevToys-CLI/stargazers"><img src="https://img.shields.io/github/stars/PloxiQ/DevToys-CLI?style=social" alt="GitHub stars"></a>
+</p>
 
-No accounts. No telemetry. No network calls. Just tools.
+<p align="center">
+  <strong>20 everyday developer tools. One tiny Rust binary.</strong><br>
+  A keyboard-first TUI for exploring and a pipe-friendly CLI for scripting.<br>
+  <sub>No accounts. No telemetry. No network calls. Just tools.</sub>
+</p>
 
-```
+<p align="center">
+  <a href="#see-it-in-action">See it in action</a> ·
+  <a href="#installation">Install</a> ·
+  <a href="#quick-start">Quick start</a> ·
+  <a href="#tool-reference">Tools</a> ·
+  <a href="#how-to-contribute-a-new-tool">Contribute</a>
+</p>
+
+## See it in action
+
+<p align="center">
+  <img src="docs/assets/tui.png" alt="DevToys CLI TUI showing the tool sidebar, JSON input and formatted JSON output" width="100%">
+</p>
+<p align="center"><sub><strong>TUI</strong> — browse all 20 tools, edit input, and see results instantly. Press <code>?</code> for keyboard shortcuts.</sub></p>
+
+<p align="center">
+  <img src="docs/assets/cli.png" alt="DevToys CLI terminal session formatting JSON, explaining a cron schedule and testing a regex" width="860">
+</p>
+<p align="center"><sub><strong>CLI</strong> — pipe-friendly commands for scripts, CI and quick one-liners.</sub></p>
+
+<details>
+<summary>Plain-text TUI preview</summary>
+
+```text
   DEVTOYS CLI  offline developer toolbox                    20 tools · zero network calls · v0.1.0
   ───────────────────────────────────────────────────────────────────────────────────────────────
 ┌ Tools 20─────────────────────┐  JSON Format  FORMAT & CONVERT
@@ -43,16 +74,19 @@ No accounts. No telemetry. No network calls. Just tools.
   Up/Down navigate   Enter edit   ? help   q quit               20 tools · offline by design · MIT · v0.1.0
 ```
 
+</details>
+
 Run `devtoys` (or `devtoys tui`) with no arguments to open the TUI.
 
 ## Why DevToys CLI?
 
-- **Two interfaces, one toolbox** — launch the TUI or use subcommands for pipelines.
-- **Offline by design** — every conversion, hash and generator runs locally.
-- **Pipe-friendly** — omit an input argument (or pass `-`) to read from stdin.
-- **Friendly failures** — every error includes a hint that tells you how to fix it.
-- **Safe defaults** — no `unsafe`, no `unwrap`/`expect` in project code, and OS entropy for UUIDs, random strings and passwords.
-- **Small and fast** — size-optimized release profile with LTO, `opt-level = "z"` and symbol stripping.
+| | |
+| --- | --- |
+| **Two interfaces, one toolbox**<br>Launch the TUI to explore, or use subcommands in scripts and pipelines. | **Offline by design**<br>Every conversion, hash and generator runs locally. No accounts, analytics or update checks. |
+| **Pipe-friendly**<br>Omit an input argument or pass `-` to read from stdin. Perfect for `curl`, `cat` and CI. | **Friendly failures**<br>Every error includes a hint that tells you how to fix it. |
+| **Safe defaults**<br>No `unsafe`, no `unwrap`/`expect` in project code, and OS entropy for every secret. | **Small and fast**<br>Size-optimized Rust release profile with LTO, `opt-level = "z"` and stripped symbols. |
+
+> **Note:** DevToys CLI is an independent terminal project inspired by the offline-toolbox idea. It is not affiliated with the DevToys GUI project.
 
 ## Installation
 
@@ -286,6 +320,14 @@ printf 'hello' | devtoys base64 encode
 - **Nothing leaves your machine.** There is no networking code, analytics or update check.
 - **JWT signatures are not verified.** See the warning above.
 
+## Roadmap
+
+- [x] 20 offline tools with both TUI and CLI
+- [x] Automated Windows, Linux and macOS releases
+- [ ] Publish `devtoys-cli` to crates.io
+- [ ] Scoop, Winget and Homebrew packages
+- [ ] More tools: number bases, case conversion, text statistics, color converter
+
 ## Project structure
 
 ```
@@ -401,20 +443,27 @@ The release workflow in `.github/workflows/release.yml` builds archives for Wind
 1. Update `version` in `Cargo.toml` and commit the change.
 2. Push a matching tag:
 
-   ```bash
-   git tag -a v0.1.0 -m "DevToys CLI v0.1.0"
-   git push origin v0.1.0
-   ```
+    ```bash
+    git tag -a v0.1.0 -m "DevToys CLI v0.1.0"
+    git push origin v0.1.0
+    ```
 
 3. GitHub Actions builds the four platform archives, generates `SHA256SUMS`, and publishes a GitHub Release with generated notes.
 4. Publish the crate separately when ready:
 
-   ```bash
-   cargo publish
-   ```
+    ```bash
+    cargo publish
+    ```
 
 Tags that do not match the version in `Cargo.toml` are rejected by the workflow.
 
 ## License
 
 MIT © [PloxiQ](https://github.com/PloxiQ). See [LICENSE](LICENSE) for details.
+
+---
+
+<p align="center">
+  <sub>Built with <a href="https://www.rust-lang.org">Rust</a>, <a href="https://ratatui.rs">ratatui</a> and <a href="https://github.com/clap-rs/clap">clap</a>.</sub><br>
+  <sub>If DevToys CLI saves you a browser tab, <a href="https://github.com/PloxiQ/DevToys-CLI/stargazers">give it a star</a> — it helps other developers find it.</sub>
+</p>
