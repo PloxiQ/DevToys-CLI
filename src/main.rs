@@ -4,13 +4,13 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use chrono::{SecondsFormat, Utc};
-use clap::Parser;
+use clap::{CommandFactory, Parser};
 
 use devtoys_cli::cli::{
     Base64Command, BinaryCommand, BytesArgs, CaseArgs, CharsetArg, Cli, ColorArgs, Command,
-    CsvCommand, DiffArgs, HashAlgorithm, HexCommand, HmacAlgorithm, HmacArgs, HtmlCommand,
-    HttpArgs, IpArgs, JsonCommand, JwtCommand, JwtPart, MimeArgs, NumberArgs, RegexCommand,
-    TextCommand, TimestampCommand,
+    CompletionShell, CompletionsArgs, CsvCommand, DiffArgs, HashAlgorithm, HexCommand,
+    HmacAlgorithm, HmacArgs, HtmlCommand, HttpArgs, IpArgs, JsonCommand, JwtCommand, JwtPart,
+    MimeArgs, NumberArgs, RegexCommand, TextCommand, TimestampCommand,
 };
 use devtoys_cli::error::{Result, ToolError};
 use devtoys_cli::style;
@@ -123,6 +123,7 @@ fn run(cli: Cli) -> Result<()> {
         }
         Some(Command::Jwt { command }) => run_jwt(command, color),
         Some(Command::Regex { command }) => run_regex(command, color),
+        Some(Command::Completions(args)) => run_completions(args),
     }
 }
 
@@ -581,6 +582,22 @@ fn run_regex(command: RegexCommand, color: bool) -> Result<()> {
             emit(&output)
         }
     }
+}
+
+fn run_completions(args: CompletionsArgs) -> Result<()> {
+    let shell = match args.shell {
+        CompletionShell::Bash => clap_complete::Shell::Bash,
+        CompletionShell::Zsh => clap_complete::Shell::Zsh,
+        CompletionShell::Fish => clap_complete::Shell::Fish,
+        CompletionShell::Powershell => clap_complete::Shell::PowerShell,
+        CompletionShell::Elvish => clap_complete::Shell::Elvish,
+    };
+    let mut command = Cli::command();
+    let mut buffer = Vec::new();
+    clap_complete::generate(shell, &mut command, "devtoys", &mut buffer);
+    let script = String::from_utf8(buffer)
+        .map_err(|_| ToolError::new("The generated completion script was not valid UTF-8."))?;
+    emit(script.trim_end_matches('\n'))
 }
 
 fn input_or_stdin(value: Option<String>, example: &str) -> Result<String> {

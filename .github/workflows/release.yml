@@ -12,8 +12,46 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  preflight:
+    name: Verify release tag
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify tag matches Cargo.toml
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n1)"
+          if [ "${GITHUB_REF_NAME}" != "v${version}" ]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match Cargo.toml version ${version}."
+            exit 1
+          fi
+
+  verify:
+    name: Release quality gates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --locked --all-targets --all-features -- -D warnings
+      - run: cargo clippy --locked --all-targets --no-default-features -- -D warnings
+      - run: cargo test --locked --all-features
+      - run: cargo test --locked --no-default-features
+      - run: cargo doc --locked --no-deps --all-features
+        env:
+          RUSTDOCFLAGS: -D warnings
+
   build:
     name: Build ${{ matrix.target }}
+    needs: [preflight, verify]
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -83,16 +121,6 @@ jobs:
         with:
           path: dist
           merge-multiple: true
-
-      - name: Verify tag matches Cargo.toml
-        shell: bash
-        run: |
-          set -euo pipefail
-          version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n1)"
-          if [ "${GITHUB_REF_NAME}" != "v${version}" ]; then
-            echo "Tag ${GITHUB_REF_NAME} does not match Cargo.toml version ${version}."
-            exit 1
-          fi
 
       - name: Generate checksums
         shell: bash
