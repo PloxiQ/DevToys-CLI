@@ -14,6 +14,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - The release workflow now runs the full quality gate and verifies that the tag
   matches `Cargo.toml` before building archives.
 
+### Changed
+
+- CI now checks documentation with warnings denied, runs every cargo command
+  with `--locked`, and the MSRV job also checks the CLI-only build.
+- The release workflow grants `contents: write` only to the publishing job.
+
 ## [0.2.1] - 2026-11-08
 
 ### Fixed
@@ -27,7 +33,6 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 ### Changed
 
 - JSON to CSV columns follow first-seen key order instead of alphabetical order.
-- CI now checks documentation with warnings denied.
 
 ## [0.2.0] - 2026-11-08
 
