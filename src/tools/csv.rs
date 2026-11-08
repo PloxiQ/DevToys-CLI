@@ -206,8 +206,8 @@ pub fn parse_delimiter(value: &str) -> Result<u8> {
     let character = match trimmed.to_ascii_lowercase().as_str() {
         "\\t" | "tab" => '\t',
         "\\0" => '\0',
-        other => {
-            let mut characters = other.chars();
+        _ => {
+            let mut characters = trimmed.chars();
             let Some(character) = characters.next() else {
                 return Ok(b',');
             };
@@ -265,6 +265,9 @@ mod tests {
     fn parses_delimiters() {
         assert_eq!(parse_delimiter(",").unwrap_or_default(), b',');
         assert_eq!(parse_delimiter("\\t").unwrap_or_default(), b'\t');
+        assert_eq!(parse_delimiter("TAB").unwrap_or_default(), b'\t');
+        assert_eq!(parse_delimiter("X").unwrap_or_default(), b'X');
+        assert_eq!(parse_delimiter("x").unwrap_or_default(), b'x');
         assert!(parse_delimiter("--").is_err());
         assert!(from_json("{}", b',').is_err());
     }

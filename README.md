@@ -368,7 +368,7 @@ devtoys csv from-json '[{"name":"Ada","age":30}]'
 devtoys csv from-json --delimiter tab '[{"name":"Ada","age":30}]'
 ```
 
-CSV to JSON keeps every cell as a string so leading zeros and large identifiers are not silently converted. JSON to CSV accepts an array of objects (columns are the union of keys, sorted) or an array of arrays. Nested objects and arrays are written as compact JSON cells.
+CSV to JSON keeps every cell as a string so leading zeros and large identifiers are not silently converted. JSON to CSV accepts an array of objects (columns are the union of keys, in first-seen order) or an array of arrays. Nested objects and arrays are written as compact JSON cells.
 
 ### Timestamps and cron
 

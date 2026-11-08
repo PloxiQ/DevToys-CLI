@@ -388,4 +388,19 @@ mod tests {
         assert!(query(input, "user..name", true).is_err());
         Ok(())
     }
+
+    #[test]
+    fn query_preserves_key_order_and_large_numbers() -> Result<()> {
+        let input = r#"{"b":1,"a":{"z":2,"y":3},"id":123456789012345678901234567890}"#;
+        let output = query(input, "$", false)?;
+        assert!(output.contains("123456789012345678901234567890"));
+        let b = output.find("\"b\"").unwrap_or(usize::MAX);
+        let a = output.find("\"a\"").unwrap_or(usize::MAX);
+        let id = output.find("\"id\"").unwrap_or(usize::MAX);
+        assert!(b < a && a < id);
+
+        let nested = query(input, "/a", false)?;
+        assert_eq!(nested, "{\n  \"z\": 2,\n  \"y\": 3\n}");
+        Ok(())
+    }
 }

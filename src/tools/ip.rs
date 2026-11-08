@@ -12,7 +12,7 @@ pub fn inspect(input: &str) -> Result<String> {
     }
 
     let (address_text, prefix_text) = match trimmed.split_once('/') {
-        Some((address, prefix)) => (address, Some(prefix)),
+        Some((address, prefix)) => (address.trim(), Some(prefix.trim())),
         None => (trimmed, None),
     };
 
@@ -128,6 +128,7 @@ fn describe_v6(ip: Ipv6Addr, prefix: u8) -> String {
 }
 
 fn scope_v4(ip: Ipv4Addr) -> &'static str {
+    let octets = ip.octets();
     if ip.is_unspecified() {
         "unspecified"
     } else if ip.is_loopback() {
@@ -142,6 +143,18 @@ fn scope_v4(ip: Ipv4Addr) -> &'static str {
         "multicast"
     } else if ip.is_documentation() {
         "documentation"
+    } else if octets[0] == 0 {
+        "this network"
+    } else if octets[0] == 100 && (64..=127).contains(&octets[1]) {
+        "shared (CGNAT)"
+    } else if octets[0] == 198 && (octets[1] == 18 || octets[1] == 19) {
+        "benchmarking"
+    } else if octets[0] == 192 && octets[1] == 0 && octets[2] == 0 {
+        "protocol assignment"
+    } else if octets[0] == 192 && octets[1] == 88 && octets[2] == 99 {
+        "6to4 relay"
+    } else if octets[0] >= 240 {
+        "reserved"
     } else {
         "public"
     }
@@ -167,8 +180,23 @@ fn scope_v6(ip: Ipv6Addr) -> &'static str {
     if segments[0] & 0xffc0 == 0xfe80 {
         return "link-local";
     }
+    if segments[0] & 0xffc0 == 0xfec0 {
+        return "site-local (deprecated)";
+    }
     if segments[0] == 0x2001 && segments[1] == 0x0db8 {
         return "documentation";
+    }
+    if segments[0] == 0x2002 {
+        return "6to4";
+    }
+    if segments[0] == 0x0064 && segments[1] == 0xff9b && segments[2] == 0 && segments[3] == 0 {
+        return "NAT64";
+    }
+    if segments[0] == 0x2001 && segments[1] == 0 {
+        return "Teredo";
+    }
+    if segments[0] == 0x0100 && segments[1..4].iter().all(|segment| *segment == 0) {
+        return "discard-only";
     }
     "global"
 }
@@ -187,6 +215,29 @@ mod tests {
 
         let output = inspect("10.0.0.0/31")?;
         assert!(output.contains("Usable     : 2"));
+
+        let output = inspect("10.0.0.1 / 24")?;
+        assert!(output.contains("Network    : 10.0.0.0"));
+        assert!(output.contains("Prefix     : /24"));
+        Ok(())
+    }
+
+    #[test]
+    fn classifies_ipv4_scopes() -> Result<(), Box<dyn std::error::Error>> {
+        for (ip, scope) in [
+            ("100.64.0.1", "shared (CGNAT)"),
+            ("198.18.0.1", "benchmarking"),
+            ("192.0.0.1", "protocol assignment"),
+            ("192.88.99.1", "6to4 relay"),
+            ("240.0.0.1", "reserved"),
+            ("0.1.2.3", "this network"),
+        ] {
+            let output = inspect(ip)?;
+            assert!(
+                output.contains(&format!("Scope      : {scope}")),
+                "unexpected scope for {ip}: {output}"
+            );
+        }
         Ok(())
     }
 
@@ -196,6 +247,26 @@ mod tests {
         assert!(output.contains("Network    : 2001:db8::"));
         assert!(output.contains("Addresses  : 18446744073709551616"));
         assert!(output.contains("Scope      : documentation"));
+        Ok(())
+    }
+
+    #[test]
+    fn classifies_ipv6_scopes() -> Result<(), Box<dyn std::error::Error>> {
+        for (ip, scope) in [
+            ("fec0::1", "site-local (deprecated)"),
+            ("2002::1", "6to4"),
+            ("64:ff9b::1", "NAT64"),
+            ("2001::1", "Teredo"),
+            ("100::1", "discard-only"),
+            ("fe80::1", "link-local"),
+            ("fd00::1", "unique-local"),
+        ] {
+            let output = inspect(ip)?;
+            assert!(
+                output.contains(&format!("Scope      : {scope}")),
+                "unexpected scope for {ip}: {output}"
+            );
+        }
         Ok(())
     }
 

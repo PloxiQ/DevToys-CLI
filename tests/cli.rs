@@ -324,7 +324,47 @@ fn queries_json_and_converts_csv() -> Result<(), Box<dyn Error>> {
 
     let output = run(&["csv", "from-json", r#"[{"name":"Ada","age":30}]"#])?;
     assert_success(&output);
-    assert_eq!(text(&output.stdout)?.trim(), "age,name\n30,Ada");
+    assert_eq!(text(&output.stdout)?.trim(), "name,age\nAda,30");
+    Ok(())
+}
+
+#[test]
+fn preserves_json_precision_csv_delimiters_and_ip_scopes() -> Result<(), Box<dyn Error>> {
+    let input = r#"{"b":1,"a":{"z":2,"y":3},"id":123456789012345678901234567890}"#;
+    let output = run(&["json", "get", "$", input])?;
+    assert_success(&output);
+    let json = text(&output.stdout)?;
+    assert!(json.contains("123456789012345678901234567890"));
+    let b = json.find("\"b\"").unwrap_or(usize::MAX);
+    let a = json.find("\"a\"").unwrap_or(usize::MAX);
+    let id = json.find("\"id\"").unwrap_or(usize::MAX);
+    assert!(b < a && a < id, "key order changed: {json}");
+
+    let output = run(&["csv", "from-json", r#"[{"one":1,"two":2}]"#, "-d", "X"])?;
+    assert_success(&output);
+    assert_eq!(text(&output.stdout)?.trim(), "oneXtwo\n1X2");
+
+    let output = run(&["ip", "10.0.0.1 / 24"])?;
+    assert_success(&output);
+    assert!(text(&output.stdout)?.contains("Network    : 10.0.0.0"));
+
+    for (ip, scope) in [
+        ("100.64.0.1", "shared (CGNAT)"),
+        ("198.18.0.1", "benchmarking"),
+        ("240.0.0.1", "reserved"),
+        ("192.0.0.1", "protocol assignment"),
+        ("fec0::1", "site-local (deprecated)"),
+        ("2002::1", "6to4"),
+        ("64:ff9b::1", "NAT64"),
+    ] {
+        let output = run(&["ip", ip])?;
+        assert_success(&output);
+        let details = text(&output.stdout)?;
+        assert!(
+            details.contains(&format!("Scope      : {scope}")),
+            "unexpected scope for {ip}: {details}"
+        );
+    }
     Ok(())
 }
 
