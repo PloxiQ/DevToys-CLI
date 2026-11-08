@@ -42,7 +42,7 @@
 <summary>Plain-text TUI preview</summary>
 
 ```text
-  DEVTOYS CLI  offline developer toolbox                    45 tools · zero network calls · v0.2.0
+  DEVTOYS CLI  offline developer toolbox                    45 tools · zero network calls · v0.2.1
   ───────────────────────────────────────────────────────────────────────────────────────────────
 ┌ Tools 45─────────────────────┐  JSON Format  FORMAT & CONVERT
 │ FORMAT & CONVERT             │  Pretty-print JSON and preserve key order.
@@ -71,7 +71,7 @@
 │   Date to Timestamp          │
 │   Cron Explainer             │
 └──────────────────────────────┘
-  Up/Down navigate   Enter edit   ? help   q quit               45 tools · offline by design · MIT · v0.2.0
+  Up/Down navigate   Enter edit   ? help   q quit               45 tools · offline by design · MIT · v0.2.1
 ```
 
 </details>
@@ -619,8 +619,8 @@ The release workflow in `.github/workflows/release.yml` builds archives for Wind
 2. Push a matching tag:
 
     ```bash
-    git tag -a v0.2.0 -m "DevToys CLI v0.2.0"
-    git push origin v0.2.0
+    git tag -a v0.2.1 -m "DevToys CLI v0.2.1"
+    git push origin v0.2.1
     ```
 
 3. GitHub Actions builds the four platform archives, generates `SHA256SUMS`, and publishes a GitHub Release with generated notes.
