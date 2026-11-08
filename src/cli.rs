@@ -131,10 +131,10 @@ pub enum Command {
     /// Compute an HMAC signature.
     Hmac(HmacArgs),
 
-    /// Generate UUID v4 values.
+    /// Generate UUID v4 or time-ordered v7 values.
     Uuid(UuidArgs),
 
-    /// Hash text with MD5, SHA-256 or SHA-512.
+    /// Hash text or a file with MD5, SHA-256 or SHA-512.
     Hash(HashArgs),
 
     /// Generate Lorem Ipsum filler text.
