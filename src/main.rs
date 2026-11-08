@@ -1,21 +1,25 @@
 use std::env;
 use std::io::{self, IsTerminal, Read, Write};
+use std::path::PathBuf;
 use std::process::ExitCode;
 
 use chrono::{SecondsFormat, Utc};
 use clap::Parser;
 
 use devtoys_cli::cli::{
-    Base64Command, CharsetArg, Cli, Command, HashAlgorithm, JsonCommand, JwtCommand, JwtPart,
-    RegexCommand, TimestampCommand,
+    Base64Command, BinaryCommand, BytesArgs, CaseArgs, CharsetArg, Cli, ColorArgs, Command,
+    CsvCommand, DiffArgs, HashAlgorithm, HexCommand, HmacAlgorithm, HmacArgs, HtmlCommand,
+    HttpArgs, IpArgs, JsonCommand, JwtCommand, JwtPart, MimeArgs, NumberArgs, RegexCommand,
+    TextCommand, TimestampCommand,
 };
 use devtoys_cli::error::{Result, ToolError};
 use devtoys_cli::style;
 use devtoys_cli::tools::hash::Algorithm;
 use devtoys_cli::tools::random::Charset;
 use devtoys_cli::tools::{
-    base64 as base64_tool, cron::CronSchedule, hash, json, jwt, lorem, random, regex as regex_tool,
-    timestamp, url, uuid,
+    base64 as base64_tool, case as case_tool, color, cron::CronSchedule, csv as csv_tool, diff,
+    encoding, hash, hmac, http, ip, json, jwt, lorem, mime, number, random, regex as regex_tool,
+    text, timestamp, url, uuid,
 };
 
 fn main() -> ExitCode {
@@ -41,18 +45,44 @@ fn run(cli: Cli) -> Result<()> {
         Some(Command::Url { command }) => run_url(command),
         Some(Command::Timestamp { command }) => run_timestamp(command),
         Some(Command::Cron(args)) => run_cron(args, color),
+        Some(Command::Case(args)) => run_case(args),
+        Some(Command::Number(args)) => run_number(args),
+        Some(Command::Bytes(args)) => run_bytes(args),
+        Some(Command::Color(args)) => run_color(args),
+        Some(Command::Text { command }) => run_text(command),
+        Some(Command::Diff(args)) => run_diff(args),
+        Some(Command::Hex { command }) => run_hex(command),
+        Some(Command::Binary { command }) => run_binary(command),
+        Some(Command::Html { command }) => run_html(command),
+        Some(Command::Csv { command }) => run_csv(command),
+        Some(Command::Http(args)) => run_http(args),
+        Some(Command::Mime(args)) => run_mime(args),
+        Some(Command::Ip(args)) => run_ip(args),
+        Some(Command::Hmac(args)) => run_hmac(args),
         Some(Command::Uuid(args)) => {
-            let values = uuid::generate(usize::from(args.count), args.upper, !args.no_hyphens)?;
+            let values = if args.v7 {
+                uuid::generate_v7(usize::from(args.count), args.upper, !args.no_hyphens)?
+            } else {
+                uuid::generate(usize::from(args.count), args.upper, !args.no_hyphens)?
+            };
             emit(&values.join("\n"))
         }
         Some(Command::Hash(args)) => {
-            let input = input_or_stdin(args.input, "devtoys hash sha256 'hello world'")?;
             let algorithm = match args.algorithm {
                 HashAlgorithm::Md5 => Algorithm::Md5,
                 HashAlgorithm::Sha256 => Algorithm::Sha256,
                 HashAlgorithm::Sha512 => Algorithm::Sha512,
             };
-            emit(&hash::hash(algorithm, &input))
+            if let Some(path) = args.file {
+                let bytes = std::fs::read(&path).map_err(|error| {
+                    ToolError::new(format!("Could not read `{}`: {error}.", path.display()))
+                        .with_hint("Check that the path exists and is readable.")
+                })?;
+                emit(&hash::hash_bytes(algorithm, &bytes))
+            } else {
+                let input = input_or_stdin(args.input, "devtoys hash sha256 'hello world'")?;
+                emit(&hash::hash(algorithm, &input))
+            }
         }
         Some(Command::Lorem(args)) => {
             let text = lorem::generate(
@@ -107,6 +137,13 @@ fn run_json(command: JsonCommand, color: bool) -> Result<()> {
             let input = input_or_stdin(args.input, "devtoys json minify '{\"a\": 1}'")?;
             emit(&json::minify(&input)?)
         }
+        JsonCommand::Get(args) => {
+            let input = input_or_stdin(
+                args.input,
+                "devtoys json get user.name '{\"user\":{\"name\":\"Ada\"}}'",
+            )?;
+            emit(&json::query(&input, &args.path, args.raw)?)
+        }
     }
 }
 
@@ -114,10 +151,11 @@ fn run_base64(command: Base64Command) -> Result<()> {
     match command {
         Base64Command::Encode(args) => {
             let input = input_or_stdin(args.input, "devtoys base64 encode 'hello'")?;
-            if args.hex {
-                emit(&base64_tool::encode_hex(&input)?)
-            } else {
-                emit(&base64_tool::encode_text(&input))
+            match (args.hex, args.url_safe) {
+                (true, true) => emit(&base64_tool::encode_hex_url(&input)?),
+                (true, false) => emit(&base64_tool::encode_hex(&input)?),
+                (false, true) => emit(&base64_tool::encode_text_url(&input)),
+                (false, false) => emit(&base64_tool::encode_text(&input)),
             }
         }
         Base64Command::Decode(args) => {
@@ -140,6 +178,13 @@ fn run_url(command: devtoys_cli::cli::UrlCommand) -> Result<()> {
         devtoys_cli::cli::UrlCommand::Decode(args) => {
             let input = input_or_stdin(args.input, "devtoys url decode 'a%20b'")?;
             emit(&url::decode(&input)?)
+        }
+        devtoys_cli::cli::UrlCommand::Parse(args) => {
+            let input = input_or_stdin(
+                args.input,
+                "devtoys url parse 'https://example.com/path?q=rust'",
+            )?;
+            emit(&url::parse_info(&input)?)
         }
     }
 }
@@ -184,6 +229,209 @@ fn run_timestamp(command: TimestampCommand) -> Result<()> {
             emit(&output)
         }
     }
+}
+
+fn run_case(args: CaseArgs) -> Result<()> {
+    let input = input_or_stdin(args.input, "devtoys case 'Hello world' --style kebab")?;
+    let style = case_tool::CaseStyle::parse(&args.style)?;
+    emit(&case_tool::convert(&input, style))
+}
+
+fn run_number(args: NumberArgs) -> Result<()> {
+    let input = input_or_stdin(args.input, "devtoys number 255 --to 16")?;
+    emit(&number::convert_base(
+        &input, args.from, args.to, args.upper,
+    )?)
+}
+
+fn run_bytes(args: BytesArgs) -> Result<()> {
+    let input = input_or_stdin(args.input, "devtoys bytes '1.5 MiB'")?;
+    emit(&number::convert_bytes(&input, args.binary)?)
+}
+
+fn run_color(args: ColorArgs) -> Result<()> {
+    let input = input_or_stdin(args.input, "devtoys color '#58a6ff'")?;
+    emit(&color::convert(&input)?)
+}
+
+fn run_text(command: TextCommand) -> Result<()> {
+    match command {
+        TextCommand::Stats(args) => {
+            let input = input_or_stdin(args.input, "devtoys text stats 'Hello world'")?;
+            emit(&text::format_stats(&input))
+        }
+        TextCommand::Sort(args) => {
+            let input = input_or_stdin(args.input, "devtoys text sort --reverse")?;
+            let options = text::SortOptions {
+                reverse: args.reverse,
+                unique: args.unique,
+                ignore_case: args.ignore_case,
+                trim: args.trim,
+            };
+            emit(&text::sort_lines(&input, options))
+        }
+        TextCommand::Dedupe(args) => {
+            let input = input_or_stdin(args.input, "devtoys text dedupe --ignore-case")?;
+            emit(&text::dedupe_lines(&input, args.ignore_case, args.trim))
+        }
+        TextCommand::Slug(args) => {
+            let input = input_or_stdin(args.input, "devtoys text slug 'Crème brûlée'")?;
+            emit(&text::slugify(&input))
+        }
+    }
+}
+
+fn run_diff(args: DiffArgs) -> Result<()> {
+    let left_stdin = args.left_file.is_none() && args.left.as_deref() == Some("-");
+    let right_stdin = args.right_file.is_none() && args.right.as_deref() == Some("-");
+    if left_stdin && right_stdin {
+        return Err(
+            ToolError::new("Only one side of the diff can come from stdin.")
+                .with_hint("Pass one side as an argument or with --left-file / --right-file."),
+        );
+    }
+
+    let left = read_diff_side(
+        args.left_file,
+        args.left,
+        "left",
+        "devtoys diff 'old text' 'new text' or devtoys diff --left-file old.txt --right-file new.txt",
+    )?;
+    let right = read_diff_side(
+        args.right_file,
+        args.right,
+        "right",
+        "devtoys diff 'old text' 'new text' or devtoys diff --left-file old.txt --right-file new.txt",
+    )?;
+    emit(&diff::diff(&left, &right, usize::from(args.context))?)
+}
+
+fn read_diff_side(
+    file: Option<PathBuf>,
+    value: Option<String>,
+    label: &str,
+    example: &str,
+) -> Result<String> {
+    if let Some(path) = file {
+        return read_text_file(&path);
+    }
+    match value {
+        Some(value) if value == "-" => read_stdin(),
+        Some(value) => Ok(value),
+        None => Err(
+            ToolError::new(format!("No {label} input provided.")).with_hint(format!(
+            "Pass it as an argument, use `-` for stdin, or use --{label}-file. Example: {example}"
+        )),
+        ),
+    }
+}
+
+fn read_text_file(path: &std::path::Path) -> Result<String> {
+    std::fs::read_to_string(path).map_err(|error| {
+        ToolError::new(format!("Could not read `{}`: {error}.", path.display()))
+            .with_hint("Check that the file exists and contains UTF-8 text.")
+    })
+}
+
+fn run_hex(command: HexCommand) -> Result<()> {
+    match command {
+        HexCommand::Encode(args) => {
+            let input = input_or_stdin(args.input, "devtoys hex encode 'Hello'")?;
+            emit(&encoding::hex_encode(&input, args.upper))
+        }
+        HexCommand::Decode(args) => {
+            let input = input_or_stdin(args.input, "devtoys hex decode 48656c6c6f")?;
+            emit(&encoding::hex_decode(&input)?)
+        }
+    }
+}
+
+fn run_binary(command: BinaryCommand) -> Result<()> {
+    match command {
+        BinaryCommand::Encode(args) => {
+            let input = input_or_stdin(args.input, "devtoys binary encode 'Hi'")?;
+            emit(&encoding::binary_encode(&input))
+        }
+        BinaryCommand::Decode(args) => {
+            let input = input_or_stdin(args.input, "devtoys binary decode '01001000 01101001'")?;
+            emit(&encoding::binary_decode(&input)?)
+        }
+    }
+}
+
+fn run_html(command: HtmlCommand) -> Result<()> {
+    match command {
+        HtmlCommand::Encode(args) => {
+            let input = input_or_stdin(args.input, "devtoys html encode '<b>Hi</b>'")?;
+            emit(&encoding::html_encode(&input))
+        }
+        HtmlCommand::Decode(args) => {
+            let input = input_or_stdin(args.input, "devtoys html decode '&lt;b&gt;Hi&lt;/b&gt;'")?;
+            emit(&encoding::html_decode(&input)?)
+        }
+    }
+}
+
+fn run_csv(command: CsvCommand) -> Result<()> {
+    match command {
+        CsvCommand::ToJson(args) => {
+            let input = input_or_stdin(args.input, "devtoys csv to-json 'name,age'")?;
+            let delimiter = csv_tool::parse_delimiter(&args.delimiter)?;
+            emit(&csv_tool::to_json(&input, delimiter, !args.no_headers)?)
+        }
+        CsvCommand::FromJson(args) => {
+            let input = input_or_stdin(args.input, "devtoys csv from-json '[{\"name\":\"Ada\"}]'")?;
+            let delimiter = csv_tool::parse_delimiter(&args.delimiter)?;
+            emit(&csv_tool::from_json(&input, delimiter)?)
+        }
+    }
+}
+
+fn run_http(args: HttpArgs) -> Result<()> {
+    if args.list {
+        return emit(&format_statuses(&http::list(None)?));
+    }
+    if let Some(class) = args.class {
+        return emit(&format_statuses(&http::list(Some(class))?));
+    }
+
+    let input = input_or_stdin(args.code.map(|code| code.to_string()), "devtoys http 404")?;
+    let code: u16 = input.trim().parse().map_err(|_| {
+        ToolError::new(format!("`{}` is not an HTTP status code.", input.trim()))
+            .with_hint("Use a number from 100 to 599, for example 404.")
+    })?;
+    emit(&http::format(http::lookup(code)?))
+}
+
+fn format_statuses(statuses: &[http::Status]) -> String {
+    statuses
+        .iter()
+        .map(|status| format!("{:>3}  {}", status.code, status.reason))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn run_mime(args: MimeArgs) -> Result<()> {
+    let input = input_or_stdin(args.input, "devtoys mime application/json")?;
+    emit(&mime::lookup(&input)?)
+}
+
+fn run_ip(args: IpArgs) -> Result<()> {
+    let input = input_or_stdin(args.input, "devtoys ip 192.168.1.42/24")?;
+    emit(&ip::inspect(&input)?)
+}
+
+fn run_hmac(args: HmacArgs) -> Result<()> {
+    let input = input_or_stdin(args.input, "devtoys hmac sha256 secret 'message'")?;
+    let algorithm = match args.algorithm {
+        HmacAlgorithm::Sha256 => hmac::Algorithm::Sha256,
+        HmacAlgorithm::Sha512 => hmac::Algorithm::Sha512,
+    };
+    emit(&hmac::hash(
+        algorithm,
+        args.key.as_bytes(),
+        input.as_bytes(),
+    )?)
 }
 
 fn run_cron(args: devtoys_cli::cli::CronArgs, color: bool) -> Result<()> {

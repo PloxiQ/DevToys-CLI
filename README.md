@@ -1,7 +1,7 @@
 # DevToys CLI
 
 <p align="center">
-  <img src="docs/assets/banner.png" alt="DevToys CLI — 20 offline developer tools in one tiny Rust binary" width="100%">
+  <img src="docs/assets/banner.png" alt="DevToys CLI — 45 offline developer tools in one tiny Rust binary" width="100%">
 </p>
 
 <p align="center">
@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <strong>20 everyday developer tools. One tiny Rust binary.</strong><br>
+  <strong>45 everyday developer tools. One tiny Rust binary.</strong><br>
   A keyboard-first TUI for exploring and a pipe-friendly CLI for scripting.<br>
   <sub>No accounts. No telemetry. No network calls. Just tools.</sub>
 </p>
@@ -31,7 +31,7 @@
 <p align="center">
   <img src="docs/assets/tui.png" alt="DevToys CLI TUI showing the tool sidebar, JSON input and formatted JSON output" width="100%">
 </p>
-<p align="center"><sub><strong>TUI</strong> — browse all 20 tools, edit input, and see results instantly. Press <code>?</code> for keyboard shortcuts.</sub></p>
+<p align="center"><sub><strong>TUI</strong> — browse all 45 tools, edit input, and see results instantly. Press <code>?</code> for keyboard shortcuts.</sub></p>
 
 <p align="center">
   <img src="docs/assets/cli.png" alt="DevToys CLI terminal session formatting JSON, explaining a cron schedule and testing a regex" width="860">
@@ -42,36 +42,36 @@
 <summary>Plain-text TUI preview</summary>
 
 ```text
-  DEVTOYS CLI  offline developer toolbox                    20 tools · zero network calls · v0.1.0
+  DEVTOYS CLI  offline developer toolbox                    45 tools · zero network calls · v0.1.0
   ───────────────────────────────────────────────────────────────────────────────────────────────
-┌ Tools 20─────────────────────┐  JSON Format  FORMAT & CONVERT
+┌ Tools 45─────────────────────┐  JSON Format  FORMAT & CONVERT
 │ FORMAT & CONVERT             │  Pretty-print JSON and preserve key order.
 │ › JSON Format                │┌ JSON input ────────────────────────────────────────────────────┐
 │   JSON Minify                ││{"name":"DevToys CLI","stars":1337,"offline":true,"tools":[...]}│
-│   Base64 Encode              ││                                                                │
-│   Base64 Decode              ││                                                                │
-│   Base64 Encode HEX          ││                                                                │
-│   Base64 Decode HEX          │└────────────────────────────────────────────────────────────────┘
-│   URL Encode                 │┌ Output  OK   155 µs ──────────────────────────────────────────┐
-│   URL Decode                 ││{                                                               │
-│   Timestamp to Date          ││  "name": "DevToys CLI",                                        │
-│   Date to Timestamp          ││  "stars": 1337,                                                │
-│   Cron Explainer             ││  "offline": true,                                              │
-│                              ││  "tools": [                                                    │
-│ GENERATE                     ││    "json",                                                     │
-│   UUID v4                    ││    "jwt",                                                      │
-│   Hash MD5                   ││    "regex"                                                     │
-│   Hash SHA-256               ││  ]                                                             │
-│   Hash SHA-512               ││}                                                               │
-│   Lorem Ipsum                ││                                                                │
-│   Random String              │└────────────────────────────────────────────────────────────────┘
-│   Password                   │
+│   JSON Query                 ││                                                                │
+│   CSV to JSON                ││                                                                │
+│   JSON to CSV                │└────────────────────────────────────────────────────────────────┘
+│   Number Base                │┌ Output  OK   155 µs ──────────────────────────────────────────┐
+│   Byte Size                  ││{                                                               │
+│   Color Converter            ││  "name": "DevToys CLI",                                        │
+│   Base64 Encode              ││  "stars": 1337,                                                │
+│   Base64 Decode              ││  "offline": true,                                              │
+│   ...                        ││  "tools": [                                                    │
+│                              ││    "json",                                                     │
+│ TEXT                         ││    "jwt",                                                      │
+│   Case Converter             ││    "regex"                                                     │
+│   Text Diff                  ││  ]                                                             │
+│   Text Statistics            ││}                                                               │
+│   Line Sorter                ││                                                                │
+│   Line Deduplicator          │└────────────────────────────────────────────────────────────────┘
+│   Slugify                    │
 │                              │
-│ INSPECT                      │
-│   JWT Decoder                │
-│   Regex Tester               │
+│ DATE & TIME                  │
+│   Timestamp to Date          │
+│   Date to Timestamp          │
+│   Cron Explainer             │
 └──────────────────────────────┘
-  Up/Down navigate   Enter edit   ? help   q quit               20 tools · offline by design · MIT · v0.1.0
+  Up/Down navigate   Enter edit   ? help   q quit               45 tools · offline by design · MIT · v0.1.0
 ```
 
 </details>
@@ -157,6 +157,16 @@ devtoys hash sha256 'hello world'
 
 # Generate 5 UUIDs
 devtoys uuid --count 5
+
+# Convert text, numbers and colors
+devtoys case 'Hello world' --style kebab
+devtoys number 255 --to 16
+devtoys color '#58a6ff'
+
+# Query JSON and convert CSV
+devtoys json get user.name '{"user":{"name":"Ada"}}'
+devtoys csv to-json 'name,age
+Ada,30'
 ```
 
 The CLI's JSON highlighter only emits ANSI colors when stdout is an interactive terminal. Piped output is always plain, and colors can be disabled explicitly with `--no-color` or `NO_COLOR=1`.
@@ -176,37 +186,86 @@ The CLI's JSON highlighter only emits ANSI colors when stdout is an interactive 
 | `?` / `F1` | Open or close help |
 | `Ctrl+C` | Quit |
 
-Most tools run automatically as you type. Generators (UUID, Lorem Ipsum, Random String, Password) run when you press `Enter`.
+Most tools run automatically as you type. Generators (UUID v4, UUID v7, File Hash, Lorem Ipsum, Random String, Password) run when you press `Enter`.
 
 ## Tool reference
+
+The TUI and CLI share the same implementations. Every command that takes text accepts stdin (omit the argument or pass `-`).
+
+### Format & Convert
 
 | Tool | TUI entry | CLI command |
 | --- | --- | --- |
 | JSON formatter | JSON Format | `devtoys json format [INPUT] [--indent N]` |
 | JSON minifier | JSON Minify | `devtoys json minify [INPUT]` |
-| Base64 encode | Base64 Encode | `devtoys base64 encode [INPUT]` |
+| JSON query | JSON Query | `devtoys json get PATH [INPUT] [--raw]` |
+| CSV → JSON | CSV to JSON | `devtoys csv to-json [INPUT] [-d DELIM] [--no-headers]` |
+| JSON → CSV | JSON to CSV | `devtoys csv from-json [INPUT] [-d DELIM]` |
+| Number base | Number Base | `devtoys number [INPUT] [--from 2-36] [--to 2-36] [--upper]` |
+| Byte size | Byte Size | `devtoys bytes [INPUT] [--binary]` |
+| Color converter | Color Converter | `devtoys color [COLOR]` |
+| Base64 encode | Base64 Encode | `devtoys base64 encode [INPUT] [--url-safe]` |
 | Base64 decode | Base64 Decode | `devtoys base64 decode [INPUT]` |
-| Base64 encode (HEX) | Base64 Encode HEX | `devtoys base64 encode --hex [INPUT]` |
+| Base64 encode (HEX) | Base64 Encode HEX | `devtoys base64 encode --hex [INPUT] [--url-safe]` |
 | Base64 decode (HEX) | Base64 Decode HEX | `devtoys base64 decode --hex [INPUT]` |
+| Hex encode | Hex Encode | `devtoys hex encode [INPUT] [--upper]` |
+| Hex decode | Hex Decode | `devtoys hex decode [INPUT]` |
+| Binary encode | Binary Encode | `devtoys binary encode [INPUT]` |
+| Binary decode | Binary Decode | `devtoys binary decode [INPUT]` |
+| HTML encode | HTML Encode | `devtoys html encode [INPUT]` |
+| HTML decode | HTML Decode | `devtoys html decode [INPUT]` |
 | URL encode | URL Encode | `devtoys url encode [INPUT]` |
 | URL decode | URL Decode | `devtoys url decode [INPUT]` |
+
+### Text
+
+| Tool | TUI entry | CLI command |
+| --- | --- | --- |
+| Case converter | Case Converter | `devtoys case [INPUT] [-s STYLE]` |
+| Text diff | Text Diff | `devtoys diff [LEFT] [RIGHT] [-c N] [--left-file PATH] [--right-file PATH]` |
+| Text statistics | Text Statistics | `devtoys text stats [INPUT]` |
+| Line sorter | Line Sorter | `devtoys text sort [INPUT] [-r] [-u] [--ignore-case] [--trim]` |
+| Line deduplicator | Line Deduplicator | `devtoys text dedupe [INPUT] [--ignore-case] [--trim]` |
+| Slugify | Slugify | `devtoys text slug [INPUT]` |
+
+### Date & Time
+
+| Tool | TUI entry | CLI command |
+| --- | --- | --- |
 | Unix timestamp → date | Timestamp to Date | `devtoys timestamp to-date [TIMESTAMP] [--ms] [--local] [--verbose]` |
 | Date → Unix timestamp | Date to Timestamp | `devtoys timestamp to-epoch [DATE] [--utc] [--ms] [--verbose]` |
-| Current timestamp | — | `devtoys timestamp now [--ms]` |
 | Cron explainer | Cron Explainer | `devtoys cron [EXPRESSION] [--next N]` |
+| Current timestamp | — | `devtoys timestamp now [--ms]` |
+
+### Generate
+
+| Tool | TUI entry | CLI command |
+| --- | --- | --- |
 | UUID v4 | UUID v4 | `devtoys uuid [--count N] [--upper] [--no-hyphens]` |
-| MD5 hash | Hash MD5 | `devtoys hash md5 [INPUT]` |
-| SHA-256 hash | Hash SHA-256 | `devtoys hash sha256 [INPUT]` |
-| SHA-512 hash | Hash SHA-512 | `devtoys hash sha512 [INPUT]` |
+| UUID v7 | UUID v7 | `devtoys uuid --v7 [--count N] [--upper] [--no-hyphens]` |
+| MD5 hash | Hash MD5 | `devtoys hash md5 [INPUT]` or `devtoys hash md5 --file PATH` |
+| SHA-256 hash | Hash SHA-256 | `devtoys hash sha256 [INPUT]` or `devtoys hash sha256 --file PATH` |
+| SHA-512 hash | Hash SHA-512 | `devtoys hash sha512 [INPUT]` or `devtoys hash sha512 --file PATH` |
+| HMAC | HMAC | `devtoys hmac sha256 KEY [INPUT]` or `devtoys hmac sha512 KEY [INPUT]` |
+| File hash | File Hash | `devtoys hash sha256 --file PATH` |
 | Lorem Ipsum | Lorem Ipsum | `devtoys lorem [-p N] [-s N] [-w N]` |
 | Random string | Random String | `devtoys random [LENGTH] [--charset SET] [-c N]` |
 | Password generator | Password | `devtoys password [-l N] [-c N] [--no-lower] [--no-upper] [--no-digits] [--no-symbols]` |
+
+### Inspect
+
+| Tool | TUI entry | CLI command |
+| --- | --- | --- |
 | JWT decoder | JWT Decoder | `devtoys jwt decode [TOKEN] [--part PART]` |
 | Regex tester | Regex Tester | `devtoys regex test PATTERN [TEXT] [-i] [-m] [-s] [-r REPLACEMENT]` |
+| URL parser | URL Parser | `devtoys url parse [URL]` |
+| HTTP status | HTTP Status | `devtoys http CODE`, `devtoys http --class N` or `devtoys http --list` |
+| MIME lookup | MIME Lookup | `devtoys mime EXTENSION_OR_MIME` |
+| IP / CIDR | IP / CIDR | `devtoys ip ADDRESS[/PREFIX]` |
 
-`--part` accepts `both` (default), `header` or `payload`.
+`--part` accepts `both` (default), `header` or `payload`. `--style` accepts `lower`, `upper`, `title`, `sentence`, `camel`, `pascal`, `snake`, `kebab`, `constant`, `dot` and `train`.
 
-Run `devtoys --help` or `devtoys <command> --help` for the complete flag list. Aliases such as `b64`, `pw`, `re`, `json fmt`, `timestamp date` and `timestamp epoch` are also available.
+Run `devtoys --help` or `devtoys <command> --help` for the complete flag list. Aliases such as `b64`, `pw`, `re`, `size`, `json fmt`, `json query`, `timestamp date` and `timestamp epoch` are also available.
 
 ## Examples
 
@@ -223,6 +282,65 @@ devtoys json minify '{
 
 The formatter preserves key order, validates input before printing anything, and highlights strings, numbers, booleans and null values when writing to a terminal.
 
+```bash
+devtoys json get user.name '{"user":{"name":"Ada"}}' --raw
+devtoys json get '/tools/1' '{"tools":["json","jwt"]}'
+```
+
+### Case, numbers and colors
+
+```bash
+devtoys case 'Hello, DevToys CLI!' --style kebab
+devtoys case 'Hello, DevToys CLI!' --style constant
+
+devtoys number 255
+devtoys number 255 --to 2
+devtoys number 0b1010 --to 10
+devtoys number ff --from 16 --to 8 --upper
+
+devtoys bytes 1536
+devtoys bytes '1.5 MiB'
+devtoys bytes '2 GB' --binary
+
+devtoys color '#58a6ff'
+devtoys color 'rgb(88, 166, 255)'
+devtoys color 'hsl(212, 100%, 67%)'
+```
+
+The color converter reports hex, RGB/RGBA, HSL, HSV, relative luminance and WCAG contrast against black and white.
+
+### Text utilities
+
+```bash
+cat README.md | devtoys text stats
+sort names.txt | devtoys text sort --reverse
+sort names.txt | devtoys text sort --unique --ignore-case
+cat emails.txt | devtoys text dedupe --ignore-case --trim
+devtoys text slug 'Crème brûlée à la DevToys'
+devtoys diff --left-file old.txt --right-file new.txt --context 3
+git show HEAD~1:README.md > old.md && devtoys diff --left-file old.md --right-file README.md
+```
+
+Text statistics count characters, words, sentences, paragraphs, lines, bytes, longest line and estimated reading time. The diff output is unified format and compares line by line.
+
+### Encoding
+
+```bash
+devtoys hex encode 'Hello, DevToys!'
+devtoys hex decode 48656c6c6f2c20446576546f797321
+devtoys hex encode --upper 'Hi'
+
+devtoys binary encode 'Hi'
+devtoys binary decode '01001000 01101001'
+
+devtoys html encode '<a href="x">Tom & Jerry</a>'
+devtoys html decode '&lt;b&gt;Hi&lt;/b&gt;'
+
+devtoys base64 encode --url-safe 'Hello'
+```
+
+Hex input accepts whitespace, `:`, `-`, `_` and an optional `0x` prefix. HTML decoding supports common named entities plus decimal and hexadecimal numeric entities.
+
 ### Base64 and URL
 
 ```bash
@@ -233,9 +351,24 @@ devtoys base64 decode --hex SGVsbG8=
 
 devtoys url encode 'https://example.com/?q=rust cli'
 devtoys url decode 'https%3A%2F%2Fexample.com%2F%3Fq%3Drust+cli'
+devtoys url parse 'https://user:pass@example.com:8443/path?a=1&b=two#top'
 ```
 
-URL encoding uses `%20` for spaces; decoding treats `+` as a space, matching form semantics.
+URL encoding uses `%20` for spaces; decoding treats `+` as a space, matching form semantics. The parser prints scheme, host, port, credentials, path, query parameters, fragment and origin.
+
+### CSV and JSON
+
+```bash
+devtoys csv to-json 'name,age
+Ada,30
+Grace,25'
+
+devtoys csv to-json --delimiter ';' --no-headers 'Ada;30'
+devtoys csv from-json '[{"name":"Ada","age":30}]'
+devtoys csv from-json --delimiter tab '[{"name":"Ada","age":30}]'
+```
+
+CSV to JSON keeps every cell as a string so leading zeros and large identifiers are not silently converted. JSON to CSV accepts an array of objects (columns are the union of keys, sorted) or an array of arrays. Nested objects and arrays are written as compact JSON cells.
 
 ### Timestamps and cron
 
@@ -262,6 +395,7 @@ Date parsing accepts RFC 3339, common date/time layouts and `now`. Timestamps ar
 devtoys uuid
 devtoys uuid --count 10 --upper
 devtoys uuid --no-hyphens
+devtoys uuid --v7 --count 5
 
 devtoys lorem
 devtoys lorem --paragraphs 3 --sentences 5 --words 12
@@ -273,7 +407,36 @@ devtoys password
 devtoys password --length 32 --no-symbols
 ```
 
-`--charset` accepts `alnum`, `alpha`, `lower`, `upper`, `numeric`, `hex`, `base58` and `symbols`. Passwords always include at least one character from every enabled class and are shuffled with OS entropy.
+`--charset` accepts `alnum`, `alpha`, `lower`, `upper`, `numeric`, `hex`, `base58` and `symbols`. Passwords always include at least one character from every enabled class and are shuffled with OS entropy. UUID v7 values are time-ordered and use OS entropy for the random bits.
+
+### Hashing and signatures
+
+```bash
+devtoys hash md5 --file legacy.iso
+devtoys hash sha256 'hello world'
+devtoys hash sha256 --file Cargo.toml
+cat archive.tar.gz | devtoys hash sha512
+
+devtoys hmac sha256 'secret' 'The quick brown fox jumps over the lazy dog'
+printf 'message' | devtoys hmac sha512 'secret'
+```
+
+`--file` hashes raw file bytes instead of UTF-8 text, so it works for archives and other binary files. HMAC supports SHA-256 and SHA-512 and prints a lowercase hex tag.
+
+### Web and network helpers
+
+```bash
+devtoys url parse 'https://github.com/PloxiQ/DevToys-CLI?tab=readme#install'
+devtoys http 404
+devtoys http --class 5
+devtoys http --list
+devtoys mime application/json
+devtoys mime photo.png
+devtoys ip 192.168.1.42/24
+devtoys ip 2001:db8::1/64
+```
+
+The HTTP, MIME and IP tables are compiled into the binary. No DNS lookups or HTTP requests are made.
 
 ### JWT
 
@@ -322,11 +485,12 @@ printf 'hello' | devtoys base64 encode
 
 ## Roadmap
 
-- [x] 20 offline tools with both TUI and CLI
+- [x] 45 offline tools with both TUI and CLI
+- [x] Converters, text utilities, encodings, CSV/JSON, web/network and security helpers
 - [x] Automated Windows, Linux and macOS releases
 - [ ] Publish `devtoys-cli` to crates.io
 - [ ] Scoop, Winget and Homebrew packages
-- [ ] More tools: number bases, case conversion, text statistics, color converter
+- [ ] More tools: diff3, JSON Schema validation, HTTP header parser, QR codes
 
 ## Project structure
 
@@ -339,13 +503,24 @@ DevToys-CLI/
 │   ├── error.rs         # ToolError with optional hints
 │   ├── style.rs         # ANSI helpers (respects NO_COLOR)
 │   ├── tools/           # pure, reusable tool implementations
-│   │   ├── json.rs      # validating formatter/minifier + syntax highlighter
-│   │   ├── base64.rs    # text/HEX Base64
-│   │   ├── url.rs       # percent encoding/decoding
+│   │   ├── json.rs      # formatter, minifier, pointer/dot-path query
+│   │   ├── csv.rs       # CSV ↔ JSON conversion
+│   │   ├── case.rs      # naming-convention conversion
+│   │   ├── text.rs      # statistics, sorting, dedupe, slugify
+│   │   ├── diff.rs      # unified line diff
+│   │   ├── encoding.rs  # hex, binary and HTML entities
+│   │   ├── base64.rs    # standard and URL-safe Base64
+│   │   ├── url.rs       # percent coding and URL parsing
+│   │   ├── number.rs    # base and byte-size conversion
+│   │   ├── color.rs     # CSS color parsing and contrast
+│   │   ├── ip.rs        # IPv4/IPv6 and CIDR inspection
+│   │   ├── http.rs      # offline HTTP status table
+│   │   ├── mime.rs      # MIME/extension lookup
 │   │   ├── timestamp.rs # Unix time conversions
 │   │   ├── cron.rs      # cron parser, describer and next-run calculator
-│   │   ├── uuid.rs      # UUID v4 generation
+│   │   ├── uuid.rs      # UUID v4/v7 generation
 │   │   ├── hash.rs      # MD5 / SHA-256 / SHA-512
+│   │   ├── hmac.rs      # HMAC-SHA-256 / HMAC-SHA-512
 │   │   ├── lorem.rs     # Lorem Ipsum generator
 │   │   ├── random.rs    # random strings and passwords
 │   │   ├── jwt.rs       # JWT decoder

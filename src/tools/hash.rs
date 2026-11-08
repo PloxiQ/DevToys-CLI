@@ -22,10 +22,16 @@ impl Algorithm {
 /// Returns a lowercase hex digest for the given UTF-8 text.
 #[must_use]
 pub fn hash(algorithm: Algorithm, input: &str) -> String {
+    hash_bytes(algorithm, input.as_bytes())
+}
+
+/// Returns a lowercase hex digest for arbitrary bytes.
+#[must_use]
+pub fn hash_bytes(algorithm: Algorithm, input: &[u8]) -> String {
     match algorithm {
-        Algorithm::Md5 => digest::<Md5>(input.as_bytes()),
-        Algorithm::Sha256 => digest::<Sha256>(input.as_bytes()),
-        Algorithm::Sha512 => digest::<Sha512>(input.as_bytes()),
+        Algorithm::Md5 => digest::<Md5>(input),
+        Algorithm::Sha256 => digest::<Sha256>(input),
+        Algorithm::Sha512 => digest::<Sha512>(input),
     }
 }
 
@@ -66,6 +72,14 @@ mod tests {
             hash(Algorithm::Sha512, "abc"),
             "ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a\
              2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f"
+        );
+    }
+
+    #[test]
+    fn hashes_arbitrary_bytes() {
+        assert_eq!(
+            super::hash_bytes(Algorithm::Sha256, b"abc"),
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
         );
     }
 }

@@ -1,5 +1,63 @@
 use crate::error::{Result, ToolError};
 
+/// Breaks a URL into its components and decoded query parameters.
+pub fn parse_info(input: &str) -> Result<String> {
+    let trimmed = input.trim();
+    if trimmed.is_empty() {
+        return Err(ToolError::new("No URL provided.")
+            .with_hint("Try `https://github.com/PloxiQ/DevToys-CLI?tab=readme#install`."));
+    }
+
+    let url = url::Url::parse(trimmed).map_err(|error| {
+        ToolError::new(format!("Invalid URL: {error}."))
+            .with_hint("Include a scheme, for example `https://example.com/path?q=rust`.")
+    })?;
+
+    let port = url.port().map_or_else(
+        || {
+            url.port_or_known_default()
+                .map_or_else(|| "(none)".to_owned(), |port| format!("{port} (default)"))
+        },
+        |port| port.to_string(),
+    );
+    let host = url.host_str().unwrap_or("(none)");
+    let username = if url.username().is_empty() {
+        "(none)".to_owned()
+    } else {
+        url.username().to_owned()
+    };
+    let password = url.password().unwrap_or("(none)");
+    let query = url.query().unwrap_or("(none)");
+    let fragment = url.fragment().unwrap_or("(none)");
+
+    let mut lines = vec![
+        format!("URL        : {url}"),
+        format!("Scheme     : {}", url.scheme()),
+        format!("Host       : {host}"),
+        format!("Port       : {port}"),
+        format!("Username   : {username}"),
+        format!("Password   : {password}"),
+        format!("Path       : {}", url.path()),
+        format!("Query      : {query}"),
+        format!("Fragment   : {fragment}"),
+        format!("Origin     : {}", url.origin().ascii_serialization()),
+    ];
+
+    let pairs: Vec<(String, String)> = url
+        .query_pairs()
+        .map(|(key, value)| (key.into_owned(), value.into_owned()))
+        .collect();
+    if !pairs.is_empty() {
+        lines.push(String::new());
+        lines.push("Query params:".to_owned());
+        for (key, value) in pairs {
+            lines.push(format!("  {key} = {value}"));
+        }
+    }
+
+    Ok(lines.join("\n"))
+}
+
 /// Percent-encodes text for use in a URL (RFC 3986 unreserved characters stay as-is).
 #[must_use]
 pub fn encode(input: &str) -> String {
@@ -71,7 +129,7 @@ fn hex_value(byte: u8) -> Option<u8> {
 
 #[cfg(test)]
 mod tests {
-    use super::{decode, encode};
+    use super::{decode, encode, parse_info};
     use crate::error::Result;
 
     #[test]
@@ -98,5 +156,20 @@ mod tests {
         assert!(decode("%2").is_err());
         assert!(decode("%GG").is_err());
         assert!(decode("%FF").is_err());
+    }
+
+    #[test]
+    fn parses_url_components_and_query() -> Result<()> {
+        let output = parse_info("https://user:pass@example.com:8443/path?a=1&b=two#top")?;
+        assert!(output.contains("Scheme     : https"));
+        assert!(output.contains("Host       : example.com"));
+        assert!(output.contains("Port       : 8443"));
+        assert!(output.contains("Username   : user"));
+        assert!(output.contains("Password   : pass"));
+        assert!(output.contains("a = 1"));
+        assert!(output.contains("b = two"));
+        assert!(output.contains("Fragment   : top"));
+        assert!(parse_info("not a url").is_err());
+        Ok(())
     }
 }

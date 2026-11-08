@@ -1,4 +1,5 @@
 use serde::de::IgnoredAny;
+use serde_json::Value;
 
 use crate::error::{Result, ToolError};
 use crate::style::{CYAN, DIM, GREEN, MAGENTA, RED, RESET, YELLOW};
@@ -90,6 +91,118 @@ pub fn minify(input: &str) -> Result<String> {
     validate(input)?;
     let tokens = tokenize(input)?;
     Ok(tokens.iter().map(|token| token.text).collect())
+}
+
+/// Looks up a value with a JSON Pointer or a convenience dot path.
+pub fn query(input: &str, path: &str, raw: bool) -> Result<String> {
+    let value: Value = serde_json::from_str(input).map_err(|error| {
+        ToolError::new(format!("Invalid JSON: {error}")).with_hint(INVALID_JSON_HINT)
+    })?;
+    let pointer = to_pointer(path)?;
+    let found = value.pointer(&pointer).ok_or_else(|| {
+        ToolError::new(format!("No value found at `{path}`.")).with_hint(
+            "Use a JSON Pointer such as `/tools/0/name` or a dot path such as `tools[0].name`.",
+        )
+    })?;
+
+    if raw {
+        if let Value::String(text) = found {
+            return Ok(text.clone());
+        }
+    }
+
+    serde_json::to_string_pretty(found)
+        .map_err(|error| ToolError::new(format!("Could not render JSON: {error}.")))
+}
+
+fn to_pointer(path: &str) -> Result<String> {
+    let mut trimmed = path.trim();
+    if trimmed.is_empty() || trimmed == "$" || trimmed == "." {
+        return Ok(String::new());
+    }
+    if trimmed.starts_with('/') {
+        return Ok(trimmed.to_owned());
+    }
+    if let Some(rest) = trimmed.strip_prefix('$') {
+        trimmed = rest;
+    }
+    if let Some(rest) = trimmed.strip_prefix('.') {
+        trimmed = rest;
+    }
+
+    let mut pointer = String::new();
+    let mut segment = String::new();
+    let mut characters = trimmed.chars().peekable();
+
+    while let Some(character) = characters.next() {
+        match character {
+            '.' => {
+                if segment.is_empty() {
+                    return Err(invalid_path(path));
+                }
+                push_pointer_segment(&mut pointer, &segment);
+                segment.clear();
+            }
+            '[' => {
+                if !segment.is_empty() {
+                    push_pointer_segment(&mut pointer, &segment);
+                    segment.clear();
+                }
+                let mut bracket = String::new();
+                let mut closed = false;
+                for inner in characters.by_ref() {
+                    if inner == ']' {
+                        closed = true;
+                        break;
+                    }
+                    bracket.push(inner);
+                }
+                if !closed {
+                    return Err(invalid_path(path));
+                }
+                let bracket = bracket.trim();
+                let key = bracket
+                    .strip_prefix('\'')
+                    .and_then(|value| value.strip_suffix('\''))
+                    .or_else(|| {
+                        bracket
+                            .strip_prefix('"')
+                            .and_then(|value| value.strip_suffix('"'))
+                    })
+                    .unwrap_or(bracket);
+                if key.is_empty() {
+                    return Err(invalid_path(path));
+                }
+                push_pointer_segment(&mut pointer, key);
+            }
+            _ => segment.push(character),
+        }
+    }
+
+    if !segment.is_empty() {
+        push_pointer_segment(&mut pointer, &segment);
+    }
+    if pointer.is_empty() {
+        return Err(invalid_path(path));
+    }
+    Ok(pointer)
+}
+
+fn push_pointer_segment(pointer: &mut String, segment: &str) {
+    pointer.push('/');
+    for character in segment.chars() {
+        match character {
+            '~' => pointer.push_str("~0"),
+            '/' => pointer.push_str("~1"),
+            _ => pointer.push(character),
+        }
+    }
+}
+
+fn invalid_path(path: &str) -> ToolError {
+    ToolError::new(format!("`{path}` is not a valid JSON path.")).with_hint(
+        "Use a JSON Pointer such as `/tools/0/name` or a dot path such as `tools[0].name`.",
+    )
 }
 
 fn validate(input: &str) -> Result<()> {
@@ -233,7 +346,7 @@ fn tokenize(input: &str) -> Result<Vec<Token<'_>>> {
 
 #[cfg(test)]
 mod tests {
-    use super::{format, minify};
+    use super::{format, minify, query};
     use crate::error::Result;
 
     #[test]
@@ -262,5 +375,17 @@ mod tests {
     fn rejects_invalid_json() {
         assert!(format("{\"a\":1,}", 2, false).is_err());
         assert!(minify("{").is_err());
+    }
+
+    #[test]
+    fn queries_json_with_pointers_and_dot_paths() -> Result<()> {
+        let input = r#"{"tools":["json","jwt"],"user":{"name":"Ada"}}"#;
+        assert_eq!(query(input, "/user/name", true)?, "Ada");
+        assert_eq!(query(input, "user.name", false)?, "\"Ada\"");
+        assert_eq!(query(input, "tools[1]", true)?, "jwt");
+        assert_eq!(query(input, "$.tools[0]", true)?, "json");
+        assert!(query(input, "missing", true).is_err());
+        assert!(query(input, "user..name", true).is_err());
+        Ok(())
     }
 }

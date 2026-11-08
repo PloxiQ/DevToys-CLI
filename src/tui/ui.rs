@@ -504,7 +504,7 @@ fn format_elapsed(duration: Duration) -> String {
 #[cfg(test)]
 mod tests {
     use super::draw;
-    use crate::tui::app::App;
+    use crate::tui::app::{App, ToolId};
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
     use ratatui::backend::TestBackend;
     use ratatui::Terminal;
@@ -541,7 +541,9 @@ mod tests {
         assert!(help.contains("select a tool"));
 
         app.handle_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
-        app.handle_key(KeyEvent::new(KeyCode::End, KeyModifiers::NONE));
+        while app.current_tool().id != ToolId::RegexTest {
+            app.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+        }
         let regex = render(&mut app)?;
         assert!(regex.contains("Regex Tester"));
         assert!(regex.contains("Test string"));

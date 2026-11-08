@@ -1,37 +1,65 @@
+use std::fs;
 use std::time::{Duration, Instant};
 
 use chrono::SecondsFormat;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::error::{Result, ToolError};
+use crate::tools::case::CaseStyle;
 use crate::tools::hash::{self, Algorithm};
 use crate::tools::random::{self, Charset, PasswordOptions};
 use crate::tools::{
-    base64, cron::CronSchedule, json, jwt, lorem, regex as regex_tool, timestamp, url, uuid,
+    base64, case as case_tool, color, cron::CronSchedule, csv as csv_tool, diff, encoding, hmac,
+    http, ip, json, jwt, lorem, mime, number, regex as regex_tool, text, timestamp, url, uuid,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ToolId {
     JsonFormat,
     JsonMinify,
+    JsonQuery,
+    CsvToJson,
+    JsonToCsv,
+    NumberBase,
+    ByteSize,
+    ColorConvert,
     Base64Encode,
     Base64Decode,
     Base64EncodeHex,
     Base64DecodeHex,
+    HexEncode,
+    HexDecode,
+    BinaryEncode,
+    BinaryDecode,
+    HtmlEncode,
+    HtmlDecode,
     UrlEncode,
     UrlDecode,
+    CaseConvert,
+    TextDiff,
+    TextStats,
+    LineSort,
+    LineDedupe,
+    Slugify,
     TimestampToDate,
     TimestampToEpoch,
     CronExplain,
     Uuid,
+    UuidV7,
     HashMd5,
     HashSha256,
     HashSha512,
+    Hmac,
+    FileHash,
     Lorem,
     RandomString,
     Password,
     JwtDecode,
     RegexTest,
+    UrlParse,
+    HttpStatus,
+    MimeLookup,
+    IpInspect,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -80,6 +108,60 @@ pub const TOOLS: &[ToolDef] = &[
         auto_run: true,
     },
     ToolDef {
+        id: ToolId::JsonQuery,
+        name: "JSON Query",
+        group: "Format & Convert",
+        description: "Read a value with a JSON Pointer or dot path.",
+        input: field("JSON input", "Paste JSON here...", r#"{"tools":["json","jwt"],"user":{"name":"Ada"}}"#),
+        secondary: Some(field("Path", "e.g. user.name or /tools/0", "user.name")),
+        auto_run: true,
+    },
+    ToolDef {
+        id: ToolId::CsvToJson,
+        name: "CSV to JSON",
+        group: "Format & Convert",
+        description: "Convert CSV rows into a pretty JSON array.",
+        input: field("CSV input", "Paste CSV here...", "name,role\nAda,Engineer\nGrace,Admiral"),
+        secondary: Some(field("Delimiter", "One character, tab or \\t", ",")),
+        auto_run: true,
+    },
+    ToolDef {
+        id: ToolId::JsonToCsv,
+        name: "JSON to CSV",
+        group: "Format & Convert",
+        description: "Convert a JSON array of objects or arrays into CSV.",
+        input: field("JSON array", "Paste a JSON array...", r#"[{"name":"Ada","role":"Engineer"},{"name":"Grace","role":"Admiral"}]"#),
+        secondary: Some(field("Delimiter", "One character, tab or \\t", ",")),
+        auto_run: true,
+    },
+    ToolDef {
+        id: ToolId::NumberBase,
+        name: "Number Base",
+        group: "Format & Convert",
+        description: "Convert integers between binary, octal, decimal, hex and base 36.",
+        input: field("Number", "e.g. 255, 0xff or 0b1010", "255"),
+        secondary: None,
+        auto_run: true,
+    },
+    ToolDef {
+        id: ToolId::ByteSize,
+        name: "Byte Size",
+        group: "Format & Convert",
+        description: "Show SI and IEC sizes for a byte count.",
+        input: field("Size", "e.g. 1536 or 1.5 MiB", "1.5 MiB"),
+        secondary: None,
+        auto_run: true,
+    },
+    ToolDef {
+        id: ToolId::ColorConvert,
+        name: "Color Converter",
+        group: "Format & Convert",
+        description: "Inspect hex, RGB, HSL, HSV and contrast values.",
+        input: field("Color", "e.g. #58a6ff or rgb(88, 166, 255)", "#58a6ff"),
+        secondary: None,
+        auto_run: true,
+    },
+    ToolDef {
         id: ToolId::Base64Encode,
         name: "Base64 Encode",
         group: "Format & Convert",
@@ -116,6 +198,60 @@ pub const TOOLS: &[ToolDef] = &[
         auto_run: true,
     },
     ToolDef {
+        id: ToolId::HexEncode,
+        name: "Hex Encode",
+        group: "Format & Convert",
+        description: "Encode UTF-8 text as lowercase hex bytes.",
+        input: field("Text", "Text to encode...", "Hello, DevToys!"),
+        secondary: None,
+        auto_run: true,
+    },
+    ToolDef {
+        id: ToolId::HexDecode,
+        name: "Hex Decode",
+        group: "Format & Convert",
+        description: "Decode hex bytes as UTF-8 text.",
+        input: field("Hex", "Hex bytes to decode...", "48656c6c6f2c20446576546f797321"),
+        secondary: None,
+        auto_run: true,
+    },
+    ToolDef {
+        id: ToolId::BinaryEncode,
+        name: "Binary Encode",
+        group: "Format & Convert",
+        description: "Encode UTF-8 text as 8-bit binary.",
+        input: field("Text", "Text to encode...", "Hi"),
+        secondary: None,
+        auto_run: true,
+    },
+    ToolDef {
+        id: ToolId::BinaryDecode,
+        name: "Binary Decode",
+        group: "Format & Convert",
+        description: "Decode an 8-bit binary string as UTF-8 text.",
+        input: field("Binary", "Binary bits to decode...", "01001000 01101001"),
+        secondary: None,
+        auto_run: true,
+    },
+    ToolDef {
+        id: ToolId::HtmlEncode,
+        name: "HTML Encode",
+        group: "Format & Convert",
+        description: "Escape HTML-sensitive characters and quotes.",
+        input: field("HTML text", "Text to escape...", r#"<a href="x">Tom & Jerry's</a>"#),
+        secondary: None,
+        auto_run: true,
+    },
+    ToolDef {
+        id: ToolId::HtmlDecode,
+        name: "HTML Decode",
+        group: "Format & Convert",
+        description: "Decode named and numeric HTML entities.",
+        input: field("Encoded HTML", "Entities to decode...", "&lt;a href=&quot;x&quot;&gt;Tom &amp; Jerry&#39;s&lt;/a&gt;"),
+        secondary: None,
+        auto_run: true,
+    },
+    ToolDef {
         id: ToolId::UrlEncode,
         name: "URL Encode",
         group: "Format & Convert",
@@ -134,9 +270,63 @@ pub const TOOLS: &[ToolDef] = &[
         auto_run: true,
     },
     ToolDef {
+        id: ToolId::CaseConvert,
+        name: "Case Converter",
+        group: "Text",
+        description: "Show lower, upper, title, camel, snake, kebab and more.",
+        input: field("Text", "Text or identifier...", "Hello, DevToys CLI!"),
+        secondary: None,
+        auto_run: true,
+    },
+    ToolDef {
+        id: ToolId::TextDiff,
+        name: "Text Diff",
+        group: "Text",
+        description: "Compare two text blocks with a unified line diff.",
+        input: field("Original", "Original text...", "one\ntwo\nthree"),
+        secondary: Some(field("Changed", "Changed text...", "one\nthree\nfour")),
+        auto_run: true,
+    },
+    ToolDef {
+        id: ToolId::TextStats,
+        name: "Text Statistics",
+        group: "Text",
+        description: "Count characters, words, sentences, paragraphs and lines.",
+        input: field("Text", "Paste text to measure...", "DevToys CLI is a fast, offline toolbox.\nIt works without accounts or telemetry.\n\nEvery tool runs locally."),
+        secondary: None,
+        auto_run: true,
+    },
+    ToolDef {
+        id: ToolId::LineSort,
+        name: "Line Sorter",
+        group: "Text",
+        description: "Sort lines with optional reverse, unique and case folding.",
+        input: field("Lines", "One value per line...", "banana\nApple\napple\ncherry"),
+        secondary: Some(field("Options", "unique, reverse, ignore-case, trim", "unique, ignore-case")),
+        auto_run: true,
+    },
+    ToolDef {
+        id: ToolId::LineDedupe,
+        name: "Line Deduplicator",
+        group: "Text",
+        description: "Remove duplicate lines while keeping first occurrences.",
+        input: field("Lines", "One value per line...", "apple\nApple\nbanana\napple"),
+        secondary: Some(field("Options", "ignore-case, trim", "ignore-case")),
+        auto_run: true,
+    },
+    ToolDef {
+        id: ToolId::Slugify,
+        name: "Slugify",
+        group: "Text",
+        description: "Transliterate text into a URL-friendly ASCII slug.",
+        input: field("Text", "Text to slugify...", "Crème brûlée à la DevToys"),
+        secondary: None,
+        auto_run: true,
+    },
+    ToolDef {
         id: ToolId::TimestampToDate,
         name: "Timestamp to Date",
-        group: "Format & Convert",
+        group: "Date & Time",
         description: "Convert Unix seconds/milliseconds to a full date breakdown.",
         input: field("Unix timestamp", "e.g. 1700000000 or 1700000000000", "1700000000"),
         secondary: None,
@@ -145,7 +335,7 @@ pub const TOOLS: &[ToolDef] = &[
     ToolDef {
         id: ToolId::TimestampToEpoch,
         name: "Date to Timestamp",
-        group: "Format & Convert",
+        group: "Date & Time",
         description: "Parse a date and show Unix seconds and milliseconds.",
         input: field("Date / time", "e.g. 2024-01-01 12:00:00 or now", "2024-01-01 12:00:00"),
         secondary: None,
@@ -154,7 +344,7 @@ pub const TOOLS: &[ToolDef] = &[
     ToolDef {
         id: ToolId::CronExplain,
         name: "Cron Explainer",
-        group: "Format & Convert",
+        group: "Date & Time",
         description: "Explain a five-field cron schedule and preview local runs.",
         input: field("Cron expression", "e.g. */15 * * * *", "*/15 * * * *"),
         secondary: None,
@@ -165,6 +355,15 @@ pub const TOOLS: &[ToolDef] = &[
         name: "UUID v4",
         group: "Generate",
         description: "Generate RFC 4122 v4 UUIDs from OS entropy.",
+        input: field("How many? (1-1000)", "1", "1"),
+        secondary: None,
+        auto_run: false,
+    },
+    ToolDef {
+        id: ToolId::UuidV7,
+        name: "UUID v7",
+        group: "Generate",
+        description: "Generate time-ordered RFC 9562 v7 UUIDs.",
         input: field("How many? (1-1000)", "1", "1"),
         secondary: None,
         auto_run: false,
@@ -195,6 +394,24 @@ pub const TOOLS: &[ToolDef] = &[
         input: field("Text to hash", "Text...", "hello world"),
         secondary: None,
         auto_run: true,
+    },
+    ToolDef {
+        id: ToolId::Hmac,
+        name: "HMAC",
+        group: "Generate",
+        description: "Sign a message with SHA-256 and a secret key.",
+        input: field("Message", "Message to sign...", "The quick brown fox jumps over the lazy dog"),
+        secondary: Some(field("Key", "Secret key...", "secret")),
+        auto_run: true,
+    },
+    ToolDef {
+        id: ToolId::FileHash,
+        name: "File Hash",
+        group: "Generate",
+        description: "Compute the SHA-256 digest of a file.",
+        input: field("File path", "e.g. Cargo.toml", "Cargo.toml"),
+        secondary: None,
+        auto_run: false,
     },
     ToolDef {
         id: ToolId::Lorem,
@@ -243,6 +460,42 @@ pub const TOOLS: &[ToolDef] = &[
             "Text to test...",
             "Contact dev@example.com or support@devtoys.dev",
         )),
+        auto_run: true,
+    },
+    ToolDef {
+        id: ToolId::UrlParse,
+        name: "URL Parser",
+        group: "Inspect",
+        description: "Break a URL into components and decoded query parameters.",
+        input: field("URL", "Paste a URL...", "https://user:pass@example.com:8443/path?a=1&b=two#top"),
+        secondary: None,
+        auto_run: true,
+    },
+    ToolDef {
+        id: ToolId::HttpStatus,
+        name: "HTTP Status",
+        group: "Inspect",
+        description: "Explain an HTTP status code or browse the offline table.",
+        input: field("Status code", "e.g. 404", "404"),
+        secondary: None,
+        auto_run: true,
+    },
+    ToolDef {
+        id: ToolId::MimeLookup,
+        name: "MIME Lookup",
+        group: "Inspect",
+        description: "Resolve extensions to MIME types and back.",
+        input: field("Extension or MIME", "e.g. json or application/json", "application/json"),
+        secondary: None,
+        auto_run: true,
+    },
+    ToolDef {
+        id: ToolId::IpInspect,
+        name: "IP / CIDR",
+        group: "Inspect",
+        description: "Describe IPv4 and IPv6 addresses, subnets and scope.",
+        input: field("IP or CIDR", "e.g. 192.168.1.42/24", "192.168.1.42/24"),
+        secondary: None,
         auto_run: true,
     },
 ];
@@ -668,12 +921,42 @@ fn run_tool(id: ToolId, input: &str, secondary: &str) -> Result<String> {
     match id {
         ToolId::JsonFormat => json::format(input, 2, false),
         ToolId::JsonMinify => json::minify(input),
+        ToolId::JsonQuery => json::query(input, secondary, false),
+        ToolId::CsvToJson => {
+            let delimiter = csv_tool::parse_delimiter(secondary)?;
+            csv_tool::to_json(input, delimiter, true)
+        }
+        ToolId::JsonToCsv => {
+            let delimiter = csv_tool::parse_delimiter(secondary)?;
+            csv_tool::from_json(input, delimiter)
+        }
+        ToolId::NumberBase => number::convert_base(input, None, None, false),
+        ToolId::ByteSize => number::convert_bytes(input, false),
+        ToolId::ColorConvert => color::convert(input),
         ToolId::Base64Encode => Ok(base64::encode_text(input)),
         ToolId::Base64Decode => base64::decode_text(input),
         ToolId::Base64EncodeHex => base64::encode_hex(input),
         ToolId::Base64DecodeHex => base64::decode_hex(input),
+        ToolId::HexEncode => Ok(encoding::hex_encode(input, false)),
+        ToolId::HexDecode => encoding::hex_decode(input),
+        ToolId::BinaryEncode => Ok(encoding::binary_encode(input)),
+        ToolId::BinaryDecode => encoding::binary_decode(input),
+        ToolId::HtmlEncode => Ok(encoding::html_encode(input)),
+        ToolId::HtmlDecode => encoding::html_decode(input),
         ToolId::UrlEncode => Ok(url::encode(input)),
         ToolId::UrlDecode => url::decode(input),
+        ToolId::CaseConvert => run_case(input),
+        ToolId::TextDiff => diff::diff(input, secondary, 3),
+        ToolId::TextStats => Ok(text::format_stats(input)),
+        ToolId::LineSort => Ok(text::sort_lines(
+            input,
+            text::parse_sort_options(secondary)?,
+        )),
+        ToolId::LineDedupe => {
+            let (ignore_case, trim) = text::parse_dedupe_options(secondary)?;
+            Ok(text::dedupe_lines(input, ignore_case, trim))
+        }
+        ToolId::Slugify => Ok(text::slugify(input)),
         ToolId::TimestampToDate => {
             timestamp::parse_epoch(input, None).map(|info| timestamp::describe_epoch(&info))
         }
@@ -685,9 +968,19 @@ fn run_tool(id: ToolId, input: &str, secondary: &str) -> Result<String> {
             let count = number_option(input, 1, 1, uuid::MAX_COUNT, "UUID count")?;
             Ok(uuid::generate(count, false, true)?.join("\n"))
         }
+        ToolId::UuidV7 => {
+            let count = number_option(input, 1, 1, uuid::MAX_COUNT, "UUID count")?;
+            Ok(uuid::generate_v7(count, false, true)?.join("\n"))
+        }
         ToolId::HashMd5 => Ok(hash::hash(Algorithm::Md5, input)),
         ToolId::HashSha256 => Ok(hash::hash(Algorithm::Sha256, input)),
         ToolId::HashSha512 => Ok(hash::hash(Algorithm::Sha512, input)),
+        ToolId::Hmac => hmac::hash(
+            hmac::Algorithm::Sha256,
+            secondary.as_bytes(),
+            input.as_bytes(),
+        ),
+        ToolId::FileHash => run_file_hash(input),
         ToolId::Lorem => {
             let paragraphs = number_option(input, 1, 1, 20, "Paragraph count")?;
             lorem::generate(paragraphs, 4, 12)
@@ -706,7 +999,42 @@ fn run_tool(id: ToolId, input: &str, secondary: &str) -> Result<String> {
         }
         ToolId::JwtDecode => run_jwt(input),
         ToolId::RegexTest => run_regex(input, secondary),
+        ToolId::UrlParse => url::parse_info(input),
+        ToolId::HttpStatus => {
+            let code: u16 = input.trim().parse().map_err(|_| {
+                ToolError::new("HTTP status must be a whole number.")
+                    .with_hint("Try 200, 301, 404 or 500.")
+            })?;
+            http::lookup(code).map(http::format)
+        }
+        ToolId::MimeLookup => mime::lookup(input),
+        ToolId::IpInspect => ip::inspect(input),
     }
+}
+
+fn run_case(input: &str) -> Result<String> {
+    let mut output = String::new();
+    for style in CaseStyle::ALL {
+        let label = format!("{}:", style.name());
+        output.push_str(&format!(
+            "{label:<10} {}\n",
+            case_tool::convert(input, style)
+        ));
+    }
+    Ok(output.trim_end().to_owned())
+}
+
+fn run_file_hash(input: &str) -> Result<String> {
+    let path = input.trim();
+    if path.is_empty() {
+        return Err(ToolError::new("No file path provided.")
+            .with_hint("Enter a file path, for example `Cargo.toml`."));
+    }
+    let bytes = fs::read(path).map_err(|error| {
+        ToolError::new(format!("Could not read `{path}`: {error}."))
+            .with_hint("Check that the path exists and is readable.")
+    })?;
+    Ok(hash::hash_bytes(Algorithm::Sha256, &bytes))
 }
 
 fn number_option(
@@ -899,11 +1227,18 @@ fn vertical_cursor(input: &str, cursor: usize, up: bool) -> usize {
 
 #[cfg(test)]
 mod tests {
-    use super::{App, Focus, ToolId};
+    use super::{App, Focus, ToolId, TOOLS};
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
     fn key(code: KeyCode) -> KeyEvent {
         KeyEvent::new(code, KeyModifiers::NONE)
+    }
+
+    fn select_tool(app: &mut App, id: ToolId) {
+        let Some(index) = TOOLS.iter().position(|tool| tool.id == id) else {
+            panic!("tool {id:?} is missing");
+        };
+        app.select_index(index);
     }
 
     #[test]
@@ -933,7 +1268,7 @@ mod tests {
     #[test]
     fn generates_passwords_on_demand() {
         let mut app = App::new();
-        app.select_index(17);
+        select_tool(&mut app, ToolId::Password);
         assert_eq!(app.current_tool().id, ToolId::Password);
         assert_eq!(
             app.current_state().output.lines().next().map(str::len),
@@ -966,9 +1301,67 @@ mod tests {
     #[test]
     fn regex_tool_has_two_fields() {
         let mut app = App::new();
-        app.select_index(19);
+        select_tool(&mut app, ToolId::RegexTest);
         assert_eq!(app.current_tool().id, ToolId::RegexTest);
         assert!(app.current_tool().secondary.is_some());
         assert!(app.current_state().output.contains("Matches: 2"));
+    }
+
+    #[test]
+    fn exposes_the_full_toolbox() {
+        assert_eq!(TOOLS.len(), 45);
+        let mut seen = std::collections::HashSet::new();
+        let mut previous = "";
+        for tool in TOOLS {
+            if tool.group != previous {
+                assert!(
+                    seen.insert(tool.group),
+                    "group `{}` is not contiguous",
+                    tool.group
+                );
+                previous = tool.group;
+            }
+        }
+    }
+
+    #[test]
+    fn runs_representative_new_tools() {
+        let mut app = App::new();
+
+        select_tool(&mut app, ToolId::JsonQuery);
+        assert!(app.current_state().output.contains("\"Ada\""));
+        assert!(app.current_state().error.is_none());
+
+        select_tool(&mut app, ToolId::CsvToJson);
+        assert!(app.current_state().output.contains("\"Ada\""));
+        assert!(app.current_state().error.is_none());
+
+        select_tool(&mut app, ToolId::NumberBase);
+        assert!(app.current_state().output.contains("Hexadecimal : ff"));
+
+        select_tool(&mut app, ToolId::TextDiff);
+        assert!(app.current_state().output.contains("-two"));
+
+        select_tool(&mut app, ToolId::IpInspect);
+        assert!(app
+            .current_state()
+            .output
+            .contains("Network    : 192.168.1.0"));
+
+        select_tool(&mut app, ToolId::Hmac);
+        assert!(app.current_state().error.is_none());
+        assert_eq!(app.current_state().output.len(), 64);
+
+        select_tool(&mut app, ToolId::HttpStatus);
+        assert!(app.current_state().output.contains("Not Found"));
+
+        select_tool(&mut app, ToolId::UrlParse);
+        assert!(app.current_state().output.contains("Scheme     : https"));
+
+        select_tool(&mut app, ToolId::MimeLookup);
+        assert!(app.current_state().output.contains("application/json"));
+
+        select_tool(&mut app, ToolId::UuidV7);
+        assert!(app.current_state().error.is_none());
     }
 }

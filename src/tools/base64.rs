@@ -9,10 +9,22 @@ pub fn encode_text(input: &str) -> String {
     STANDARD.encode(input.as_bytes())
 }
 
+/// Encodes UTF-8 text as URL-safe Base64 without padding.
+#[must_use]
+pub fn encode_text_url(input: &str) -> String {
+    URL_SAFE_NO_PAD.encode(input.as_bytes())
+}
+
 /// Encodes a hex string (whitespace, `:`, `-` and `_` separators allowed) as Base64.
 pub fn encode_hex(input: &str) -> Result<String> {
     let bytes = parse_hex(input)?;
     Ok(STANDARD.encode(bytes))
+}
+
+/// Encodes a hex string as URL-safe Base64 without padding.
+pub fn encode_hex_url(input: &str) -> Result<String> {
+    let bytes = parse_hex(input)?;
+    Ok(URL_SAFE_NO_PAD.encode(bytes))
 }
 
 /// Decodes Base64 to UTF-8 text.
@@ -115,7 +127,10 @@ fn bytes_to_hex(bytes: &[u8]) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{decode_bytes, decode_hex, decode_text, encode_hex, encode_text};
+    use super::{
+        decode_bytes, decode_hex, decode_text, encode_hex, encode_hex_url, encode_text,
+        encode_text_url,
+    };
     use crate::error::Result;
 
     #[test]
@@ -138,6 +153,9 @@ mod tests {
     fn accepts_url_safe_and_unpadded_input() -> Result<()> {
         assert_eq!(decode_bytes("SGVsbG8")?, b"Hello");
         assert_eq!(decode_bytes("SGVsbG8=")?, b"Hello");
+        assert_eq!(encode_text_url("Hello"), "SGVsbG8");
+        assert_eq!(encode_hex_url("fb ff")?, "-_8");
+        assert_eq!(decode_bytes("-_8")?, [0xfb, 0xff]);
         Ok(())
     }
 
