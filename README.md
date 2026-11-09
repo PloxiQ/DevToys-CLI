@@ -134,19 +134,28 @@ Generate completions with `devtoys completions <shell>`:
 
 ```bash
 # Bash
+mkdir -p ~/.local/share/bash-completion/completions
 devtoys completions bash > ~/.local/share/bash-completion/completions/devtoys
 
-# Zsh
-devtoys completions zsh > "${fpath[1]}/_devtoys"
+# Zsh: the directory must be on $fpath before compinit runs
+mkdir -p ~/.zfunc
+devtoys completions zsh > ~/.zfunc/_devtoys
+# then add this line to ~/.zshrc, above `compinit`:
+#   fpath=(~/.zfunc $fpath)
 
 # Fish
+mkdir -p ~/.config/fish/completions
 devtoys completions fish > ~/.config/fish/completions/devtoys.fish
-
-# PowerShell (add to your profile)
-devtoys completions powershell >> $PROFILE
 
 # Elvish
 devtoys completions elvish > ~/.config/elvish/lib/devtoys.elv
+```
+
+PowerShell: add this line to your profile (`$PROFILE`, create it first with
+`New-Item -ItemType File -Force $PROFILE` if it does not exist yet):
+
+```powershell
+devtoys completions powershell | Out-String | Invoke-Expression
 ```
 
 ### Uninstall
