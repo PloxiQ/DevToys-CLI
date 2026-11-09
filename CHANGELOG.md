@@ -5,12 +5,23 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.3.0] - 2026-11-10
 
 ### Added
 
+- Six new TUI entries and five new tool families: RFC 4648 Base32 encode/decode,
+  offline HTTP header inspection with redaction, bounded three-way file merging,
+  terminal and SVG QR codes, and offline JSON Schema validation. The toolbox now
+  has 51 TUI entries across both the TUI and CLI.
+- HTTP header parsing preserves duplicate headers, accepts request and status
+  lines, canonicalizes names, and can redact authorization and cookie values.
+- Three-way merge prints standard conflict markers and exits with status 1 on
+  conflicts; clean merges print only the merged text.
+- JSON Schema validation uses internal references only and reports JSON Pointer
+  paths with arbitrary-precision numbers.
 - `devtoys completions <shell>` generates completion scripts for Bash, Zsh, Fish,
   PowerShell and Elvish.
+- `cargo binstall devtoys-cli` can install prebuilt release archives.
 - The release workflow now runs the full quality gate and verifies that the tag
   matches `Cargo.toml` before building archives.
 

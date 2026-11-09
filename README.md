@@ -42,7 +42,7 @@
 <summary>Plain-text TUI preview</summary>
 
 ```text
-  DEVTOYS CLI  offline developer toolbox                    51 tools · zero network calls · v0.2.1
+  DEVTOYS CLI  offline developer toolbox                    51 tools · zero network calls · v0.3.0
   ───────────────────────────────────────────────────────────────────────────────────────────────
 ┌ Tools 51─────────────────────┐  JSON Format  FORMAT & CONVERT
 │ FORMAT & CONVERT             │  Pretty-print JSON and preserve key order.
@@ -71,7 +71,7 @@
 │   Date to Timestamp          │
 │   Cron Explainer             │
 └──────────────────────────────┘
-  Up/Down navigate   Enter edit   ? help   q quit               51 tools · offline by design · MIT · v0.2.1
+  Up/Down navigate   Enter edit   ? help   q quit               51 tools · offline by design · MIT · v0.3.0
 ```
 
 </details>
@@ -102,6 +102,15 @@ Download the latest archive from [GitHub Releases](https://github.com/PloxiQ/Dev
 | macOS Intel | `devtoys-vX.Y.Z-x86_64-apple-darwin.tar.gz` |
 
 Each archive contains the `devtoys` binary, `README.md` and `LICENSE`. Verify downloads with the `SHA256SUMS` file attached to every release.
+
+### Install with cargo-binstall
+
+```bash
+cargo binstall devtoys-cli
+```
+
+`cargo-binstall` downloads the prebuilt archive for your platform when one is available,
+instead of compiling from source.
 
 ### Build from source
 
@@ -731,8 +740,8 @@ The release workflow in `.github/workflows/release.yml` builds archives for Wind
 2. Push a matching tag:
 
     ```bash
-    git tag -a v0.2.1 -m "DevToys CLI v0.2.1"
-    git push origin v0.2.1
+    git tag -a v0.3.0 -m "DevToys CLI v0.3.0"
+    git push origin v0.3.0
     ```
 
 3. GitHub Actions builds the four platform archives, generates `SHA256SUMS`, and publishes a GitHub Release with generated notes.
