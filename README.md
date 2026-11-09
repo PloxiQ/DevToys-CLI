@@ -128,6 +128,27 @@ cargo install --git https://github.com/PloxiQ/DevToys-CLI
 cargo install --path . --no-default-features
 ```
 
+### Shell completions
+
+Generate completions with `devtoys completions <shell>`:
+
+```bash
+# Bash
+devtoys completions bash > ~/.local/share/bash-completion/completions/devtoys
+
+# Zsh
+devtoys completions zsh > "${fpath[1]}/_devtoys"
+
+# Fish
+devtoys completions fish > ~/.config/fish/completions/devtoys.fish
+
+# PowerShell (add to your profile)
+devtoys completions powershell >> $PROFILE
+
+# Elvish
+devtoys completions elvish > ~/.config/elvish/lib/devtoys.elv
+```
+
 ### Uninstall
 
 ```bash

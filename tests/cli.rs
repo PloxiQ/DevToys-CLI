@@ -207,6 +207,7 @@ fn every_subcommand_help_succeeds() -> Result<(), Box<dyn Error>> {
         "password",
         "jwt",
         "regex",
+        "completions",
         "tui",
     ] {
         let output = run(&[command, "--help"])?;
@@ -434,6 +435,27 @@ fn hashes_hmacs_files_and_generates_v7_uuids() -> Result<(), Box<dyn Error>> {
         "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
     );
     let _ = std::fs::remove_file(&path);
+    Ok(())
+}
+
+#[test]
+fn generates_shell_completions() -> Result<(), Box<dyn Error>> {
+    for shell in ["bash", "zsh", "fish", "powershell", "elvish"] {
+        let output = run(&["completions", shell])?;
+        assert_success(&output);
+        let script = text(&output.stdout)?;
+        assert!(
+            script.contains("devtoys"),
+            "{shell} completions did not mention devtoys"
+        );
+        assert!(
+            script.lines().count() > 5,
+            "{shell} completions looked too short"
+        );
+    }
+
+    let output = run(&["completions", "nushell"])?;
+    assert!(!output.status.success());
     Ok(())
 }
 

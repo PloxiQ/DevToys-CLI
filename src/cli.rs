@@ -21,6 +21,7 @@ EXAMPLES:
   devtoys hash sha256 'hello world'
   devtoys hash sha256 --file Cargo.toml
   devtoys hmac sha256 secret 'message'
+  devtoys completions bash
 
 Use `devtoys <command> --help` for tool-specific help.";
 
@@ -160,8 +161,27 @@ pub enum Command {
         command: RegexCommand,
     },
 
+    /// Generate shell completion scripts.
+    Completions(CompletionsArgs),
+
     /// Launch the interactive TUI (default when no command is given).
     Tui,
+}
+
+#[derive(Debug, Args)]
+pub struct CompletionsArgs {
+    /// Shell to generate completions for.
+    #[arg(value_enum)]
+    pub shell: CompletionShell,
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+pub enum CompletionShell {
+    Bash,
+    Zsh,
+    Fish,
+    Powershell,
+    Elvish,
 }
 
 #[derive(Debug, Subcommand)]
