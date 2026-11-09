@@ -9,12 +9,19 @@ use crate::tools::case::CaseStyle;
 use crate::tools::hash::{self, Algorithm};
 use crate::tools::random::{self, Charset, PasswordOptions};
 use crate::tools::{
-    base64, case as case_tool, color, cron::CronSchedule, csv as csv_tool, diff, encoding, hmac,
-    http, ip, json, jwt, lorem, mime, number, regex as regex_tool, text, timestamp, url, uuid,
+    base32, base64, case as case_tool, color, cron::CronSchedule, csv as csv_tool, diff, diff3,
+    encoding, headers, hmac, http, ip, json, jsonschema, jwt, limits, lorem, mime, number, qr,
+    regex as regex_tool, text, timestamp, url, uuid,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ToolId {
+    Base32Encode,
+    Base32Decode,
+    Headers,
+    Diff3,
+    Qr,
+    JsonSchema,
     JsonFormat,
     JsonMinify,
     JsonQuery,
@@ -77,6 +84,7 @@ pub struct ToolDef {
     pub description: &'static str,
     pub input: FieldDef,
     pub secondary: Option<FieldDef>,
+    pub tertiary: Option<FieldDef>,
     pub auto_run: bool,
 }
 
@@ -96,6 +104,7 @@ pub const TOOLS: &[ToolDef] = &[
         description: "Pretty-print JSON and preserve key order.",
         input: field("JSON input", "Paste JSON here...", r#"{"name":"DevToys CLI","stars":1337,"offline":true,"tools":["json","jwt","regex"]}"#),
         secondary: None,
+        tertiary: None,
         auto_run: true,
     },
     ToolDef {
@@ -105,6 +114,7 @@ pub const TOOLS: &[ToolDef] = &[
         description: "Remove insignificant whitespace for compact payloads.",
         input: field("JSON input", "Paste JSON here...", "{\n  \"name\": \"DevToys CLI\",\n  \"offline\": true\n}"),
         secondary: None,
+        tertiary: None,
         auto_run: true,
     },
     ToolDef {
@@ -114,6 +124,7 @@ pub const TOOLS: &[ToolDef] = &[
         description: "Read a value with a JSON Pointer or dot path.",
         input: field("JSON input", "Paste JSON here...", r#"{"tools":["json","jwt"],"user":{"name":"Ada"}}"#),
         secondary: Some(field("Path", "e.g. user.name or /tools/0", "user.name")),
+        tertiary: None,
         auto_run: true,
     },
     ToolDef {
@@ -123,6 +134,7 @@ pub const TOOLS: &[ToolDef] = &[
         description: "Convert CSV rows into a pretty JSON array.",
         input: field("CSV input", "Paste CSV here...", "name,role\nAda,Engineer\nGrace,Admiral"),
         secondary: Some(field("Delimiter", "One character, tab or \\t", ",")),
+        tertiary: None,
         auto_run: true,
     },
     ToolDef {
@@ -132,6 +144,7 @@ pub const TOOLS: &[ToolDef] = &[
         description: "Convert a JSON array of objects or arrays into CSV.",
         input: field("JSON array", "Paste a JSON array...", r#"[{"name":"Ada","role":"Engineer"},{"name":"Grace","role":"Admiral"}]"#),
         secondary: Some(field("Delimiter", "One character, tab or \\t", ",")),
+        tertiary: None,
         auto_run: true,
     },
     ToolDef {
@@ -141,6 +154,7 @@ pub const TOOLS: &[ToolDef] = &[
         description: "Convert integers between binary, octal, decimal, hex and base 36.",
         input: field("Number", "e.g. 255, 0xff or 0b1010", "255"),
         secondary: None,
+        tertiary: None,
         auto_run: true,
     },
     ToolDef {
@@ -150,6 +164,7 @@ pub const TOOLS: &[ToolDef] = &[
         description: "Show SI and IEC sizes for a byte count.",
         input: field("Size", "e.g. 1536 or 1.5 MiB", "1.5 MiB"),
         secondary: None,
+        tertiary: None,
         auto_run: true,
     },
     ToolDef {
@@ -159,6 +174,27 @@ pub const TOOLS: &[ToolDef] = &[
         description: "Inspect hex, RGB, HSL, HSV and contrast values.",
         input: field("Color", "e.g. #58a6ff or rgb(88, 166, 255)", "#58a6ff"),
         secondary: None,
+        tertiary: None,
+        auto_run: true,
+    },
+    ToolDef {
+        id: ToolId::Base32Encode,
+        name: "Base32 Encode",
+        group: "Format & Convert",
+        description: "Encode UTF-8 text as RFC 4648 Base32.",
+        input: field("Text", "Text to encode...", "Hello, DevToys!"),
+        secondary: None,
+        tertiary: None,
+        auto_run: true,
+    },
+    ToolDef {
+        id: ToolId::Base32Decode,
+        name: "Base32 Decode",
+        group: "Format & Convert",
+        description: "Decode Base32 with optional padding and mixed case.",
+        input: field("Base32", "Base32 to decode...", "NBSWY3DP"),
+        secondary: None,
+        tertiary: None,
         auto_run: true,
     },
     ToolDef {
@@ -168,6 +204,7 @@ pub const TOOLS: &[ToolDef] = &[
         description: "Encode UTF-8 text as standard Base64.",
         input: field("Text", "Text to encode...", "Hello, DevToys!"),
         secondary: None,
+        tertiary: None,
         auto_run: true,
     },
     ToolDef {
@@ -177,6 +214,7 @@ pub const TOOLS: &[ToolDef] = &[
         description: "Decode Base64 to UTF-8 text.",
         input: field("Base64", "Base64 to decode...", "SGVsbG8sIERldlRveXMh"),
         secondary: None,
+        tertiary: None,
         auto_run: true,
     },
     ToolDef {
@@ -186,6 +224,7 @@ pub const TOOLS: &[ToolDef] = &[
         description: "Encode raw hex bytes as Base64.",
         input: field("Hex input", "Hex bytes, e.g. 48656c6c6f", "48656c6c6f2c20446576546f797321"),
         secondary: None,
+        tertiary: None,
         auto_run: true,
     },
     ToolDef {
@@ -195,6 +234,7 @@ pub const TOOLS: &[ToolDef] = &[
         description: "Inspect Base64 payload as lowercase hex bytes.",
         input: field("Base64", "Base64 to inspect...", "SGVsbG8sIERldlRveXMh"),
         secondary: None,
+        tertiary: None,
         auto_run: true,
     },
     ToolDef {
@@ -204,6 +244,7 @@ pub const TOOLS: &[ToolDef] = &[
         description: "Encode UTF-8 text as lowercase hex bytes.",
         input: field("Text", "Text to encode...", "Hello, DevToys!"),
         secondary: None,
+        tertiary: None,
         auto_run: true,
     },
     ToolDef {
@@ -213,6 +254,7 @@ pub const TOOLS: &[ToolDef] = &[
         description: "Decode hex bytes as UTF-8 text.",
         input: field("Hex", "Hex bytes to decode...", "48656c6c6f2c20446576546f797321"),
         secondary: None,
+        tertiary: None,
         auto_run: true,
     },
     ToolDef {
@@ -222,6 +264,7 @@ pub const TOOLS: &[ToolDef] = &[
         description: "Encode UTF-8 text as 8-bit binary.",
         input: field("Text", "Text to encode...", "Hi"),
         secondary: None,
+        tertiary: None,
         auto_run: true,
     },
     ToolDef {
@@ -231,6 +274,7 @@ pub const TOOLS: &[ToolDef] = &[
         description: "Decode an 8-bit binary string as UTF-8 text.",
         input: field("Binary", "Binary bits to decode...", "01001000 01101001"),
         secondary: None,
+        tertiary: None,
         auto_run: true,
     },
     ToolDef {
@@ -240,6 +284,7 @@ pub const TOOLS: &[ToolDef] = &[
         description: "Escape HTML-sensitive characters and quotes.",
         input: field("HTML text", "Text to escape...", r#"<a href="x">Tom & Jerry's</a>"#),
         secondary: None,
+        tertiary: None,
         auto_run: true,
     },
     ToolDef {
@@ -249,6 +294,7 @@ pub const TOOLS: &[ToolDef] = &[
         description: "Decode named and numeric HTML entities.",
         input: field("Encoded HTML", "Entities to decode...", "&lt;a href=&quot;x&quot;&gt;Tom &amp; Jerry&#39;s&lt;/a&gt;"),
         secondary: None,
+        tertiary: None,
         auto_run: true,
     },
     ToolDef {
@@ -258,6 +304,7 @@ pub const TOOLS: &[ToolDef] = &[
         description: "Percent-encode text for safe use in URLs.",
         input: field("Text", "Text or URL to encode...", "https://github.com/PloxiQ/DevToys-CLI?q=rust cli&lang=en"),
         secondary: None,
+        tertiary: None,
         auto_run: true,
     },
     ToolDef {
@@ -267,6 +314,7 @@ pub const TOOLS: &[ToolDef] = &[
         description: "Decode percent escapes; plus becomes a space.",
         input: field("Encoded URL", "Encoded URL to decode...", "https%3A%2F%2Fexample.com%2F%3Fq%3Drust+cli"),
         secondary: None,
+        tertiary: None,
         auto_run: true,
     },
     ToolDef {
@@ -276,7 +324,18 @@ pub const TOOLS: &[ToolDef] = &[
         description: "Show lower, upper, title, camel, snake, kebab and more.",
         input: field("Text", "Text or identifier...", "Hello, DevToys CLI!"),
         secondary: None,
+        tertiary: None,
         auto_run: true,
+    },
+    ToolDef {
+        id: ToolId::Diff3,
+        name: "Three-Way Merge",
+        group: "Text",
+        description: "Merge three UTF-8 files. Conflicts remain in the output for resolution.",
+        input: field("Base path", "Common ancestor file...", "Cargo.toml"),
+        secondary: Some(field("Ours path", "Our file...", "Cargo.toml")),
+        tertiary: Some(field("Theirs path", "Their file...", "Cargo.toml")),
+        auto_run: false,
     },
     ToolDef {
         id: ToolId::TextDiff,
@@ -285,6 +344,7 @@ pub const TOOLS: &[ToolDef] = &[
         description: "Compare two text blocks with a unified line diff.",
         input: field("Original", "Original text...", "one\ntwo\nthree"),
         secondary: Some(field("Changed", "Changed text...", "one\nthree\nfour")),
+        tertiary: None,
         auto_run: true,
     },
     ToolDef {
@@ -294,6 +354,7 @@ pub const TOOLS: &[ToolDef] = &[
         description: "Count characters, words, sentences, paragraphs and lines.",
         input: field("Text", "Paste text to measure...", "DevToys CLI is a fast, offline toolbox.\nIt works without accounts or telemetry.\n\nEvery tool runs locally."),
         secondary: None,
+        tertiary: None,
         auto_run: true,
     },
     ToolDef {
@@ -303,6 +364,7 @@ pub const TOOLS: &[ToolDef] = &[
         description: "Sort lines with optional reverse, unique and case folding.",
         input: field("Lines", "One value per line...", "banana\nApple\napple\ncherry"),
         secondary: Some(field("Options", "unique, reverse, ignore-case, trim", "unique, ignore-case")),
+        tertiary: None,
         auto_run: true,
     },
     ToolDef {
@@ -312,6 +374,7 @@ pub const TOOLS: &[ToolDef] = &[
         description: "Remove duplicate lines while keeping first occurrences.",
         input: field("Lines", "One value per line...", "apple\nApple\nbanana\napple"),
         secondary: Some(field("Options", "ignore-case, trim", "ignore-case")),
+        tertiary: None,
         auto_run: true,
     },
     ToolDef {
@@ -321,6 +384,7 @@ pub const TOOLS: &[ToolDef] = &[
         description: "Transliterate text into a URL-friendly ASCII slug.",
         input: field("Text", "Text to slugify...", "Crème brûlée à la DevToys"),
         secondary: None,
+        tertiary: None,
         auto_run: true,
     },
     ToolDef {
@@ -330,6 +394,7 @@ pub const TOOLS: &[ToolDef] = &[
         description: "Convert Unix seconds/milliseconds to a full date breakdown.",
         input: field("Unix timestamp", "e.g. 1700000000 or 1700000000000", "1700000000"),
         secondary: None,
+        tertiary: None,
         auto_run: true,
     },
     ToolDef {
@@ -339,6 +404,7 @@ pub const TOOLS: &[ToolDef] = &[
         description: "Parse a date and show Unix seconds and milliseconds.",
         input: field("Date / time", "e.g. 2024-01-01 12:00:00 or now", "2024-01-01 12:00:00"),
         secondary: None,
+        tertiary: None,
         auto_run: true,
     },
     ToolDef {
@@ -348,6 +414,7 @@ pub const TOOLS: &[ToolDef] = &[
         description: "Explain a five-field cron schedule and preview local runs.",
         input: field("Cron expression", "e.g. */15 * * * *", "*/15 * * * *"),
         secondary: None,
+        tertiary: None,
         auto_run: true,
     },
     ToolDef {
@@ -357,6 +424,7 @@ pub const TOOLS: &[ToolDef] = &[
         description: "Generate RFC 4122 v4 UUIDs from OS entropy.",
         input: field("How many? (1-1000)", "1", "1"),
         secondary: None,
+        tertiary: None,
         auto_run: false,
     },
     ToolDef {
@@ -366,6 +434,7 @@ pub const TOOLS: &[ToolDef] = &[
         description: "Generate time-ordered RFC 9562 v7 UUIDs.",
         input: field("How many? (1-1000)", "1", "1"),
         secondary: None,
+        tertiary: None,
         auto_run: false,
     },
     ToolDef {
@@ -375,6 +444,7 @@ pub const TOOLS: &[ToolDef] = &[
         description: "Compute an MD5 digest (legacy checksums only).",
         input: field("Text to hash", "Text...", "hello world"),
         secondary: None,
+        tertiary: None,
         auto_run: true,
     },
     ToolDef {
@@ -384,6 +454,7 @@ pub const TOOLS: &[ToolDef] = &[
         description: "Compute a SHA-256 digest.",
         input: field("Text to hash", "Text...", "hello world"),
         secondary: None,
+        tertiary: None,
         auto_run: true,
     },
     ToolDef {
@@ -393,6 +464,7 @@ pub const TOOLS: &[ToolDef] = &[
         description: "Compute a SHA-512 digest.",
         input: field("Text to hash", "Text...", "hello world"),
         secondary: None,
+        tertiary: None,
         auto_run: true,
     },
     ToolDef {
@@ -402,6 +474,7 @@ pub const TOOLS: &[ToolDef] = &[
         description: "Sign a message with SHA-256 and a secret key.",
         input: field("Message", "Message to sign...", "The quick brown fox jumps over the lazy dog"),
         secondary: Some(field("Key", "Secret key...", "secret")),
+        tertiary: None,
         auto_run: true,
     },
     ToolDef {
@@ -411,6 +484,7 @@ pub const TOOLS: &[ToolDef] = &[
         description: "Compute the SHA-256 digest of a file.",
         input: field("File path", "e.g. Cargo.toml", "Cargo.toml"),
         secondary: None,
+        tertiary: None,
         auto_run: false,
     },
     ToolDef {
@@ -420,6 +494,7 @@ pub const TOOLS: &[ToolDef] = &[
         description: "Generate classic Latin filler paragraphs.",
         input: field("Paragraphs (1-20)", "1", "1"),
         secondary: None,
+        tertiary: None,
         auto_run: false,
     },
     ToolDef {
@@ -429,6 +504,7 @@ pub const TOOLS: &[ToolDef] = &[
         description: "Generate a cryptographically secure alphanumeric string.",
         input: field("Length (1-4096)", "32", "32"),
         secondary: None,
+        tertiary: None,
         auto_run: false,
     },
     ToolDef {
@@ -438,6 +514,7 @@ pub const TOOLS: &[ToolDef] = &[
         description: "Generate a password with every character class.",
         input: field("Length (4-256)", "24", "24"),
         secondary: None,
+        tertiary: None,
         auto_run: false,
     },
     ToolDef {
@@ -447,7 +524,38 @@ pub const TOOLS: &[ToolDef] = &[
         description: "Decode JWT header, payload and registered claims. No verification.",
         input: field("JWT", "Paste a compact JWT...", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"),
         secondary: None,
+        tertiary: None,
         auto_run: true,
+    },
+    ToolDef {
+        id: ToolId::Headers,
+        name: "HTTP Headers",
+        group: "Inspect",
+        description: "Inspect headers. Tab to Redact; Space or arrows toggle it.",
+        input: field("Header block", "Name: value", "GET / HTTP/1.1\nHost: example.com\nAuthorization: Bearer example"),
+        secondary: Some(field("Redact (Space / arrows)", "off or on", "off")),
+        tertiary: None,
+        auto_run: true,
+    },
+    ToolDef {
+        id: ToolId::JsonSchema,
+        name: "JSON Schema",
+        group: "Inspect",
+        description: "Validate JSON using a schema. External references are disabled.",
+        input: field("JSON instance", "JSON to validate...", r#"{"name":"Ada"}"#),
+        secondary: Some(field("Schema JSON", "Paste a JSON Schema...", r#"{"type":"object","required":["name"],"properties":{"name":{"type":"string"}}}"#)),
+        tertiary: None,
+        auto_run: false,
+    },
+    ToolDef {
+        id: ToolId::Qr,
+        name: "QR Code",
+        group: "Inspect",
+        description: "Generate QR half blocks. Tab to ECC; Space or arrows select L/M/Q/H.",
+        input: field("Text", "Text to encode...", "Hello, DevToys!"),
+        secondary: Some(field("ECC (Space / arrows)", "L, M, Q or H", "M")),
+        tertiary: None,
+        auto_run: false,
     },
     ToolDef {
         id: ToolId::RegexTest,
@@ -460,6 +568,7 @@ pub const TOOLS: &[ToolDef] = &[
             "Text to test...",
             "Contact dev@example.com or support@devtoys.dev",
         )),
+        tertiary: None,
         auto_run: true,
     },
     ToolDef {
@@ -469,6 +578,7 @@ pub const TOOLS: &[ToolDef] = &[
         description: "Break a URL into components and decoded query parameters.",
         input: field("URL", "Paste a URL...", "https://user:pass@example.com:8443/path?a=1&b=two#top"),
         secondary: None,
+        tertiary: None,
         auto_run: true,
     },
     ToolDef {
@@ -478,6 +588,7 @@ pub const TOOLS: &[ToolDef] = &[
         description: "Explain an HTTP status code or browse the offline table.",
         input: field("Status code", "e.g. 404", "404"),
         secondary: None,
+        tertiary: None,
         auto_run: true,
     },
     ToolDef {
@@ -487,6 +598,7 @@ pub const TOOLS: &[ToolDef] = &[
         description: "Resolve extensions to MIME types and back.",
         input: field("Extension or MIME", "e.g. json or application/json", "application/json"),
         secondary: None,
+        tertiary: None,
         auto_run: true,
     },
     ToolDef {
@@ -496,6 +608,7 @@ pub const TOOLS: &[ToolDef] = &[
         description: "Describe IPv4 and IPv6 addresses, subnets and scope.",
         input: field("IP or CIDR", "e.g. 192.168.1.42/24", "192.168.1.42/24"),
         secondary: None,
+        tertiary: None,
         auto_run: true,
     },
 ];
@@ -505,6 +618,7 @@ pub enum Focus {
     Sidebar,
     Primary,
     Secondary,
+    Tertiary,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -520,7 +634,10 @@ pub struct ToolState {
     pub cursor: usize,
     pub secondary: String,
     pub secondary_cursor: usize,
+    pub tertiary: String,
+    pub tertiary_cursor: usize,
     pub output: String,
+    pub outcome: Option<&'static str>,
     pub error: Option<String>,
     pub hint: Option<String>,
     pub elapsed: Duration,
@@ -536,7 +653,12 @@ impl ToolState {
                 .secondary
                 .map_or_else(String::new, |field| field.sample.to_owned()),
             secondary_cursor: tool.secondary.map_or(0, |field| field.sample.len()),
+            tertiary: tool
+                .tertiary
+                .map_or_else(String::new, |field| field.sample.to_owned()),
+            tertiary_cursor: tool.tertiary.map_or(0, |field| field.sample.len()),
             output: String::new(),
+            outcome: None,
             error: None,
             hint: None,
             elapsed: Duration::ZERO,
@@ -633,7 +755,7 @@ impl App {
 
         match self.focus {
             Focus::Sidebar => self.handle_sidebar_key(key),
-            Focus::Primary | Focus::Secondary => {
+            Focus::Primary | Focus::Secondary | Focus::Tertiary => {
                 self.handle_editor_key(key);
                 false
             }
@@ -641,6 +763,9 @@ impl App {
     }
 
     pub fn handle_paste(&mut self, text: &str) {
+        if !self.can_insert(text.len()) {
+            return;
+        }
         let normalized = text.replace("\r\n", "\n").replace('\r', "\n");
         if let Some((input, cursor)) = self.active_field_mut() {
             input.insert_str(*cursor, &normalized);
@@ -668,6 +793,35 @@ impl App {
     }
 
     fn handle_editor_key(&mut self, key: KeyEvent) {
+        if self.focus == Focus::Secondary
+            && key.modifiers.is_empty()
+            && matches!(
+                key.code,
+                KeyCode::Char(' ') | KeyCode::Left | KeyCode::Right
+            )
+        {
+            let choices: &[&str] = match self.current_tool().id {
+                ToolId::Headers => &["off", "on"],
+                ToolId::Qr => &["L", "M", "Q", "H"],
+                _ => &[],
+            };
+            if !choices.is_empty() {
+                let state = &mut self.states[self.selected];
+                let index = choices
+                    .iter()
+                    .position(|value| *value == state.secondary)
+                    .unwrap_or(0);
+                let next = if key.code == KeyCode::Left {
+                    (index + choices.len() - 1) % choices.len()
+                } else {
+                    (index + 1) % choices.len()
+                };
+                state.secondary = choices[next].to_owned();
+                state.secondary_cursor = state.secondary.len();
+                self.run_current();
+                return;
+            }
+        }
         if key.modifiers.contains(KeyModifiers::ALT) && key.code == KeyCode::Enter {
             self.insert_text("\n");
             return;
@@ -769,7 +923,9 @@ impl App {
         self.focus = match self.focus {
             Focus::Primary if self.current_tool().secondary.is_some() => Focus::Secondary,
             Focus::Primary => Focus::Sidebar,
+            Focus::Secondary if self.current_tool().tertiary.is_some() => Focus::Tertiary,
             Focus::Secondary => Focus::Primary,
+            Focus::Tertiary => Focus::Primary,
             Focus::Sidebar => Focus::Primary,
         };
     }
@@ -778,16 +934,18 @@ impl App {
         let tool = self.current_tool();
         let state = &mut self.states[self.selected];
         let started = Instant::now();
-        let result = run_tool(tool.id, &state.input, &state.secondary);
+        let result = run_tool(tool.id, &state.input, &state.secondary, &state.tertiary);
         state.elapsed = started.elapsed();
         state.output_scroll = 0;
         match result {
-            Ok(output) => {
+            Ok((output, outcome)) => {
                 state.output = output;
+                state.outcome = outcome;
                 state.error = None;
                 state.hint = None;
             }
             Err(error) => {
+                state.outcome = None;
                 state.output.clear();
                 state.error = Some(error.message().to_owned());
                 state.hint = error.hint().map(str::to_owned);
@@ -803,6 +961,7 @@ impl App {
 
     fn active_field_mut(&mut self) -> Option<(&mut String, &mut usize)> {
         let has_secondary = self.current_tool().secondary.is_some();
+        let has_tertiary = self.current_tool().tertiary.is_some();
         match self.focus {
             Focus::Primary => {
                 let state = &mut self.states[self.selected];
@@ -811,6 +970,10 @@ impl App {
             Focus::Secondary if has_secondary => {
                 let state = &mut self.states[self.selected];
                 Some((&mut state.secondary, &mut state.secondary_cursor))
+            }
+            Focus::Tertiary if has_tertiary => {
+                let state = &mut self.states[self.selected];
+                Some((&mut state.tertiary, &mut state.tertiary_cursor))
             }
             _ => None,
         }
@@ -836,10 +999,33 @@ impl App {
     }
 
     fn insert_text(&mut self, text: &str) {
+        if !self.can_insert(text.len()) {
+            return;
+        }
         self.edit_field(|input, cursor| {
             input.insert_str(*cursor, text);
             *cursor += text.len();
         });
+    }
+
+    fn can_insert(&mut self, additional: usize) -> bool {
+        let limit = match self.current_tool().id {
+            ToolId::Base32Encode | ToolId::Base32Decode | ToolId::Headers | ToolId::JsonSchema => {
+                limits::MIB
+            }
+            ToolId::Diff3 => 4096,
+            ToolId::Qr => qr::MAX_INPUT,
+            _ => return true,
+        };
+        let fits = self
+            .active_field_mut()
+            .is_none_or(|(input, _)| input.len().saturating_add(additional) <= limit);
+        if !fits {
+            let state = &mut self.states[self.selected];
+            state.error = Some(format!("Input exceeds the {limit}-byte limit."));
+            state.hint = Some("Use a smaller input.".to_owned());
+        }
+        fits
     }
 
     fn clear_field(&mut self) {
@@ -917,8 +1103,41 @@ fn find_selected_row(rows: &[SidebarRow], tool_index: usize) -> usize {
         .unwrap_or(0)
 }
 
-fn run_tool(id: ToolId, input: &str, secondary: &str) -> Result<String> {
+fn run_tool(
+    id: ToolId,
+    input: &str,
+    secondary: &str,
+    tertiary: &str,
+) -> Result<(String, Option<&'static str>)> {
     match id {
+        ToolId::Base32Encode => base32::encode(input, true, false),
+        ToolId::Base32Decode => base32::decode(input),
+        ToolId::Headers => {
+            let redact = match secondary.trim() {
+                "on" => true,
+                "off" => false,
+                _ => {
+                    return Err(ToolError::new("Redact must be on or off.")
+                        .with_hint("Tab to Redact and press Space."))
+                }
+            };
+            headers::parse(input, redact)
+        }
+        ToolId::Qr => qr::generate(input, secondary, false, false),
+        ToolId::JsonSchema => {
+            return jsonschema::validate(secondary, input)
+                .map(|report| (report.text, (!report.valid).then_some("INVALID")))
+        }
+        ToolId::Diff3 => {
+            let read = |path: &str| limits::read_file(std::path::Path::new(path), diff3::MAX_INPUT);
+            return diff3::merge(
+                &read(input)?,
+                &read(secondary)?,
+                &read(tertiary)?,
+                ["base", "ours", "theirs"],
+            )
+            .map(|report| (report.text, report.conflicted.then_some("CONFLICT")));
+        }
         ToolId::JsonFormat => json::format(input, 2, false),
         ToolId::JsonMinify => json::minify(input),
         ToolId::JsonQuery => json::query(input, secondary, false),
@@ -1010,6 +1229,7 @@ fn run_tool(id: ToolId, input: &str, secondary: &str) -> Result<String> {
         ToolId::MimeLookup => mime::lookup(input),
         ToolId::IpInspect => ip::inspect(input),
     }
+    .map(|output| (output, None))
 }
 
 fn run_case(input: &str) -> Result<String> {
@@ -1309,7 +1529,7 @@ mod tests {
 
     #[test]
     fn exposes_the_full_toolbox() {
-        assert_eq!(TOOLS.len(), 45);
+        assert_eq!(TOOLS.len(), 51);
         let mut seen = std::collections::HashSet::new();
         let mut previous = "";
         for tool in TOOLS {
@@ -1322,6 +1542,74 @@ mod tests {
                 previous = tool.group;
             }
         }
+    }
+
+    #[test]
+    fn new_tools_run_and_select_options() {
+        let mut app = App::new();
+        for id in [
+            ToolId::Base32Encode,
+            ToolId::Base32Decode,
+            ToolId::Headers,
+            ToolId::Diff3,
+            ToolId::Qr,
+            ToolId::JsonSchema,
+        ] {
+            select_tool(&mut app, id);
+            assert!(
+                app.current_state().error.is_none(),
+                "{id:?}: {:?}",
+                app.current_state().error
+            );
+            assert!(!app.current_state().output.is_empty());
+        }
+        select_tool(&mut app, ToolId::Headers);
+        app.handle_key(key(KeyCode::Enter));
+        app.handle_key(key(KeyCode::Tab));
+        app.handle_key(key(KeyCode::Char(' ')));
+        assert!(app.current_state().output.contains("[redacted]"));
+        assert!(!app.current_state().output.contains("Bearer example"));
+        app.handle_key(key(KeyCode::Esc));
+        select_tool(&mut app, ToolId::Qr);
+        app.handle_key(key(KeyCode::Enter));
+        app.handle_key(key(KeyCode::Tab));
+        app.handle_key(key(KeyCode::Right));
+        assert_eq!(app.current_state().secondary, "Q");
+        assert!(app.current_state().error.is_none());
+    }
+
+    #[test]
+    fn merge_third_field_and_invalid_schema_outcome() {
+        let mut app = App::new();
+        select_tool(&mut app, ToolId::Diff3);
+        app.handle_key(key(KeyCode::Enter));
+        app.handle_key(key(KeyCode::Tab));
+        app.handle_key(key(KeyCode::Tab));
+        assert_eq!(app.focus(), Focus::Tertiary);
+        app.handle_key(KeyEvent::new(KeyCode::Char('u'), KeyModifiers::CONTROL));
+        app.handle_paste("nonexistent-devtoys-merge-file");
+        app.handle_key(key(KeyCode::Enter));
+        assert!(app.current_state().error.is_some());
+        assert!(app.current_state().hint.is_some());
+        app.handle_key(key(KeyCode::Esc));
+        select_tool(&mut app, ToolId::JsonSchema);
+        app.handle_key(key(KeyCode::Enter));
+        app.handle_key(KeyEvent::new(KeyCode::Char('u'), KeyModifiers::CONTROL));
+        app.handle_paste("{}");
+        app.handle_key(key(KeyCode::Enter));
+        assert_eq!(app.current_state().outcome, Some("INVALID"));
+        assert!(app.current_state().output.contains("required"));
+    }
+
+    #[test]
+    fn new_editors_reject_oversized_pastes() {
+        let mut app = App::new();
+        select_tool(&mut app, ToolId::Qr);
+        app.handle_key(key(KeyCode::Enter));
+        let original = app.current_state().input.clone();
+        app.handle_paste(&"a".repeat(crate::tools::qr::MAX_INPUT + 1));
+        assert_eq!(app.current_state().input, original);
+        assert!(app.current_state().error.is_some());
     }
 
     #[test]

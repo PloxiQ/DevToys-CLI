@@ -1,6 +1,8 @@
 use std::error::Error;
 use std::io::Write;
+use std::path::PathBuf;
 use std::process::{Command, Output, Stdio};
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 fn devtoys() -> Command {
     Command::new(env!("CARGO_BIN_EXE_devtoys"))
@@ -8,6 +10,69 @@ fn devtoys() -> Command {
 
 fn run(args: &[&str]) -> Result<Output, Box<dyn Error>> {
     Ok(devtoys().args(args).output()?)
+}
+
+fn run_stdin(args: &[&str], input: &[u8]) -> Result<Output, Box<dyn Error>> {
+    let mut child = devtoys()
+        .args(args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
+    if let Some(mut stdin) = child.stdin.take() {
+        if let Err(error) = stdin.write_all(input) {
+            if error.kind() != std::io::ErrorKind::BrokenPipe {
+                return Err(error.into());
+            }
+        }
+    }
+    Ok(child.wait_with_output()?)
+}
+
+fn assert_input_error(output: &Output) {
+    assert_eq!(output.status.code(), Some(1));
+    assert!(
+        output.stdout.is_empty(),
+        "errors must not contaminate stdout"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("error:"), "{stderr}");
+    assert!(stderr.contains("hint:"), "{stderr}");
+    assert!(!stderr.contains("panicked"), "{stderr}");
+}
+
+struct ToolFiles(PathBuf);
+
+impl ToolFiles {
+    fn new() -> Result<Self, Box<dyn Error>> {
+        static NEXT_ID: AtomicUsize = AtomicUsize::new(0);
+        loop {
+            let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
+            let path =
+                std::env::temp_dir().join(format!("devtoys-cli-tools-{}-{id}", std::process::id()));
+            match std::fs::create_dir(&path) {
+                Ok(()) => return Ok(Self(path)),
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                Err(error) => return Err(error.into()),
+            }
+        }
+    }
+
+    fn path(&self, name: &str) -> String {
+        self.0.join(name).to_string_lossy().into_owned()
+    }
+
+    fn write(&self, name: &str, contents: impl AsRef<[u8]>) -> Result<String, Box<dyn Error>> {
+        let path = self.path(name);
+        std::fs::write(&path, contents)?;
+        Ok(path)
+    }
+}
+
+impl Drop for ToolFiles {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
 }
 
 fn text(bytes: &[u8]) -> Result<String, Box<dyn Error>> {
@@ -183,6 +248,11 @@ fn every_subcommand_help_succeeds() -> Result<(), Box<dyn Error>> {
     for command in [
         "json",
         "base64",
+        "base32",
+        "headers",
+        "diff3",
+        "qr",
+        "jsonschema",
         "url",
         "timestamp",
         "cron",
@@ -476,5 +546,390 @@ fn help_is_available() -> Result<(), Box<dyn Error>> {
     let help = text(&output.stdout)?;
     assert!(help.contains("Format, minify and inspect JSON"));
     assert!(help.contains("jwt"));
+    Ok(())
+}
+
+#[test]
+fn base32_arguments_stdin_flags_and_invalid_input() -> Result<(), Box<dyn Error>> {
+    let output = run(&["base32", "encode", "foobar"])?;
+    assert_success(&output);
+    assert_eq!(text(&output.stdout)?, "MZXW6YTBOI======\n");
+    let output = run(&["base32", "encode", "foobar", "--no-padding", "--lower"])?;
+    assert_success(&output);
+    assert_eq!(text(&output.stdout)?, "mzxw6ytboi\n");
+    let output = run(&["base32", "decode", "mZ Xw6YtBoI======\r\n"])?;
+    assert_success(&output);
+    assert_eq!(text(&output.stdout)?, "foobar\n");
+    for explicit in [false, true] {
+        let mut args = vec!["base32", "encode"];
+        if explicit {
+            args.push("-");
+        }
+        let output = run_stdin(&args, "Привіт 🌍".as_bytes())?;
+        assert_success(&output);
+        let encoded = text(&output.stdout)?;
+        let mut args = vec!["base32", "decode"];
+        if explicit {
+            args.push("-");
+        }
+        let output = run_stdin(&args, encoded.as_bytes())?;
+        assert_success(&output);
+        assert_eq!(text(&output.stdout)?, "Привіт 🌍\n");
+    }
+    for malformed in ["A", "M0======", "MY=", "MY=======", "MZ======", "74======"] {
+        assert_input_error(&run(&["base32", "decode", malformed])?);
+        assert_input_error(&run_stdin(
+            &["base32", "decode", "-"],
+            malformed.as_bytes(),
+        )?);
+    }
+    for action in ["encode", "decode"] {
+        let output = run(&["base32", action, ""])?;
+        assert_success(&output);
+        assert_eq!(text(&output.stdout)?, "\n");
+        assert_success(&run(&["base32", action, "--help"])?);
+    }
+    Ok(())
+}
+
+#[test]
+fn headers_arguments_stdin_duplicates_and_redaction() -> Result<(), Box<dyn Error>> {
+    let input = "HTTP/1.1 200 OK\r\ncontent-type:\ttext/plain \t\r\nset-cookie: a=1\r\nSet-Cookie: b=2\r\n\r\n";
+    let expected = "HTTP/1.1 200 OK\nContent-Type: text/plain\nSet-Cookie: a=1\nSet-Cookie: b=2\n";
+    let output = run(&["headers", input])?;
+    assert_success(&output);
+    assert_eq!(text(&output.stdout)?, expected);
+    for args in [&["headers"][..], &["headers", "-"][..]] {
+        let output = run_stdin(args, input.as_bytes())?;
+        assert_success(&output);
+        assert_eq!(text(&output.stdout)?, expected);
+    }
+    let input = "GET / HTTP/1.1\nAuthorization: Bearer secret\nProxy-Authorization: proxy\nCookie: session=secret\nSet-Cookie: session=secret\nX-Api-Key: secret\nHost: example.com";
+    for output in [
+        run(&["headers", input, "--redact"])?,
+        run_stdin(&["headers", "--redact", "-"], input.as_bytes())?,
+    ] {
+        assert_success(&output);
+        let headers = text(&output.stdout)?;
+        assert_eq!(headers.matches("[redacted]").count(), 5);
+        assert!(!headers.contains("secret"));
+        assert!(headers.contains("GET / HTTP/1.1"));
+        assert!(headers.contains("Host: example.com"));
+    }
+    for input in [
+        "",
+        " \t\r\n",
+        "missing colon",
+        "Host: example.com\n folded",
+        "bad name: value",
+    ] {
+        assert_input_error(&run(&["headers", input])?);
+    }
+    let output = run_stdin(&["headers", "-"], b"Host: example.com\nmalformed")?;
+    assert_input_error(&output);
+    assert!(text(&output.stderr)?.contains("line 2"));
+    Ok(())
+}
+
+#[test]
+fn diff3_merges_files_and_each_stdin_position() -> Result<(), Box<dyn Error>> {
+    let files = ToolFiles::new()?;
+    let base_text = "one\ntwo\nthree\n";
+    let ours_text = "ONE\ntwo\nthree\n";
+    let theirs_text = "one\ntwo\nTHREE\n";
+    let base = files.write("base file.txt", base_text)?;
+    let ours = files.write("ours файл.txt", ours_text)?;
+    let theirs = files.write("theirs.txt", theirs_text)?;
+    let args = [
+        "diff3", "--base", &base, "--ours", &ours, "--theirs", &theirs,
+    ];
+    let output = run(&args)?;
+    assert_success(&output);
+    assert_eq!(text(&output.stdout)?, "ONE\ntwo\nTHREE\n");
+    assert!(output.stderr.is_empty());
+    for (index, stdin) in [(2, base_text), (4, ours_text), (6, theirs_text)] {
+        let mut args = args;
+        args[index] = "-";
+        let output = run_stdin(&args, stdin.as_bytes())?;
+        assert_success(&output);
+        assert_eq!(text(&output.stdout)?, "ONE\ntwo\nTHREE\n");
+        assert!(output.stderr.is_empty());
+    }
+    Ok(())
+}
+
+#[test]
+fn diff3_conflicts_have_exit_one_and_custom_labels() -> Result<(), Box<dyn Error>> {
+    let files = ToolFiles::new()?;
+    let base = files.write("base", "ancestor")?;
+    let ours = files.write("ours", "local")?;
+    let theirs = files.write("theirs", "remote")?;
+    let output = run(&[
+        "diff3",
+        "--base",
+        &base,
+        "--ours",
+        &ours,
+        "--theirs",
+        &theirs,
+        "--label-base",
+        "original.txt",
+        "--label-ours",
+        "our.txt",
+        "--label-theirs",
+        "their.txt",
+    ])?;
+    assert_eq!(output.status.code(), Some(1));
+    assert!(output.stderr.is_empty());
+    assert_eq!(text(&output.stdout)?,
+        "<<<<<<< our.txt\nlocal\n||||||| original.txt\nancestor\n=======\nremote\n>>>>>>> their.txt\n");
+    Ok(())
+}
+
+#[test]
+fn diff3_preserves_identical_crlf_empty_and_unterminated_files() -> Result<(), Box<dyn Error>> {
+    let files = ToolFiles::new()?;
+    for input in ["", "same", "same\n", "same\r\nlast\r\n", "same\r\nlast"] {
+        let path = files.write("same", input)?;
+        let output = run(&["diff3", "--base", &path, "--ours", &path, "--theirs", &path])?;
+        assert_success(&output);
+        assert_eq!(text(&output.stdout)?, input);
+    }
+    let base = files.write("base", "one\r\ntwo\r\nthree")?;
+    let ours = files.write("ours", "ONE\r\ntwo\r\nthree")?;
+    let theirs = files.write("theirs", "one\r\ntwo\r\nTHREE")?;
+    let output = run(&[
+        "diff3", "--base", &base, "--ours", &ours, "--theirs", &theirs,
+    ])?;
+    assert_success(&output);
+    assert_eq!(text(&output.stdout)?, "ONE\r\ntwo\r\nTHREE");
+    Ok(())
+}
+
+#[test]
+fn diff3_invalid_files_stdin_and_labels_have_hints() -> Result<(), Box<dyn Error>> {
+    let files = ToolFiles::new()?;
+    let good = files.write("good", "text")?;
+    let invalid = files.write("invalid", [0xff, 0xfe])?;
+    let huge = files.write("huge", vec![b'x'; 256 * 1024 + 1])?;
+    for bad in [files.path("missing"), invalid, huge] {
+        let output = run(&["diff3", "--base", &bad, "--ours", &good, "--theirs", &good])?;
+        assert_input_error(&output);
+    }
+    assert_input_error(&run_stdin(
+        &["diff3", "--base", "-", "--ours", &good, "--theirs", &good],
+        b"\xff",
+    )?);
+    for args in [
+        ["diff3", "--base", "-", "--ours", "-", "--theirs", &good],
+        ["diff3", "--base", &good, "--ours", "-", "--theirs", "-"],
+        ["diff3", "--base", "-", "--ours", &good, "--theirs", "-"],
+    ] {
+        assert_input_error(&run_stdin(&args, b"")?);
+    }
+    assert_input_error(&run(&[
+        "diff3",
+        "--base",
+        &good,
+        "--ours",
+        &good,
+        "--theirs",
+        &good,
+        "--label-base",
+        "not\na label",
+    ])?);
+    Ok(())
+}
+
+#[test]
+fn qr_arguments_stdin_ecc_svg_and_output_files() -> Result<(), Box<dyn Error>> {
+    let output = run(&["qr", "HELLO WORLD"])?;
+    assert_success(&output);
+    let terminal = text(&output.stdout)?;
+    assert_eq!(terminal.lines().count(), 15);
+    assert!(terminal.lines().all(|line| line.chars().count() == 29));
+    assert!(terminal.lines().take(2).all(|line| line.trim().is_empty()));
+    for args in [&["qr"][..], &["qr", "-"][..]] {
+        let output = run_stdin(args, b"HELLO WORLD")?;
+        assert_success(&output);
+        assert_eq!(text(&output.stdout)?, terminal);
+    }
+    for level in ["L", "M", "Q", "H", "h"] {
+        let output = run(&["qr", "Привіт 🌍", "--ecc", level, "--svg"])?;
+        assert_success(&output);
+        let svg = text(&output.stdout)?;
+        assert!(svg.starts_with("<?xml"));
+        assert!(svg.contains("<svg"));
+        assert!(!svg.contains('\u{1b}'));
+    }
+    let inverted = run(&["qr", "HELLO WORLD", "--invert"])?;
+    assert_success(&inverted);
+    assert!(text(&inverted.stdout)?
+        .lines()
+        .next()
+        .is_some_and(|line| line.chars().all(|c| c == '█')));
+    let low = run(&["qr", "HELLO WORLD", "--svg", "--ecc", "L"])?;
+    let high = run(&["qr", "HELLO WORLD", "--svg", "--ecc", "H"])?;
+    assert_success(&low);
+    assert_success(&high);
+    assert_ne!(low.stdout, high.stdout);
+
+    let files = ToolFiles::new()?;
+    let svg_path = files.path("code.svg");
+    let svg = run(&["qr", "hello", "--svg", "--invert"])?;
+    assert_success(&svg);
+    let output = run(&["qr", "hello", "--svg", "--invert", "--output", &svg_path])?;
+    assert_success(&output);
+    assert!(output.stdout.is_empty());
+    assert_eq!(std::fs::read(&svg_path)?, svg.stdout);
+    let text_path = files.path("code.txt");
+    let output = run_stdin(&["qr", "-", "--output", &text_path], b"HELLO WORLD")?;
+    assert_success(&output);
+    assert!(output.stdout.is_empty());
+    assert_eq!(std::fs::read_to_string(&text_path)?, terminal);
+    Ok(())
+}
+
+#[test]
+fn qr_invalid_inputs_and_unwritable_outputs_have_hints() -> Result<(), Box<dyn Error>> {
+    let files = ToolFiles::new()?;
+    assert_input_error(&run(&["qr", ""])?);
+    assert_input_error(&run_stdin(&["qr", "-", "--ecc", "H"], &vec![b'a'; 3000])?);
+    for path in [
+        files.0.to_string_lossy().into_owned(),
+        files.path("missing/code.svg"),
+    ] {
+        assert_input_error(&run(&["qr", "hello", "--svg", "--output", &path])?);
+    }
+    let output = run(&["qr", "hello", "--ecc", "invalid"])?;
+    assert_eq!(output.status.code(), Some(2));
+    assert!(text(&output.stderr)?.contains("possible values"));
+    Ok(())
+}
+
+#[test]
+fn jsonschema_arguments_stdin_and_instance_error_paths() -> Result<(), Box<dyn Error>> {
+    let files = ToolFiles::new()?;
+    let schema = files.write("schema.json", r#"{"type":"object","required":["name"],"properties":{"name":{"type":"string"},"items":{"type":"array","items":{"type":"integer"}}}}"#)?;
+    let instance = r#"{"name":"Ada","items":[1,2]}"#;
+    let output = run(&["jsonschema", "--schema", &schema, instance])?;
+    assert_success(&output);
+    assert_eq!(text(&output.stdout)?, "Valid.\n");
+    for args in [
+        vec!["jsonschema", "--schema", &schema],
+        vec!["jsonschema", "--schema", &schema, "-"],
+    ] {
+        let output = run_stdin(&args, instance.as_bytes())?;
+        assert_success(&output);
+        assert_eq!(text(&output.stdout)?, "Valid.\n");
+    }
+    for invalid in [
+        "42",
+        "{}",
+        r#"{"name":1}"#,
+        r#"{"name":"Ada","items":[1,"bad"]}"#,
+    ] {
+        let output = run(&["jsonschema", "--schema", &schema, invalid])?;
+        assert_eq!(output.status.code(), Some(1));
+        assert!(output.stderr.is_empty());
+        assert!(!output.stdout.is_empty());
+        assert!(!text(&output.stdout)?.contains("Valid."));
+    }
+    let output = run_stdin(
+        &["jsonschema", "--schema", &schema, "-"],
+        br#"{"name":"Ada","items":[1,"bad"]}"#,
+    )?;
+    assert_eq!(output.status.code(), Some(1));
+    assert!(text(&output.stdout)?.contains("/items/1"));
+    assert!(output.stderr.is_empty());
+    Ok(())
+}
+
+#[test]
+fn jsonschema_internal_references_patterns_enums_and_precise_numbers() -> Result<(), Box<dyn Error>>
+{
+    let files = ToolFiles::new()?;
+    let schema = files.write("schema.json", r##"{"$defs":{"person":{"type":"object","properties":{"name":{"type":"string","pattern":"^[A-Z]"},"role":{"enum":["engineer","writer"]}},"required":["name","role"]}},"$ref":"#/$defs/person"}"##)?;
+    assert_success(&run(&[
+        "jsonschema",
+        "--schema",
+        &schema,
+        r#"{"name":"Ada","role":"engineer"}"#,
+    ])?);
+    for instance in [
+        r#"{"name":"ada","role":"engineer"}"#,
+        r#"{"name":"Ada","role":"admin"}"#,
+    ] {
+        let output = run(&["jsonschema", "--schema", &schema, instance])?;
+        assert_eq!(output.status.code(), Some(1));
+        assert!(output.stderr.is_empty());
+    }
+    let schema = files.write("number.json", r#"{"type":"integer","minimum":123456789012345678901234567890,"maximum":123456789012345678901234567890}"#)?;
+    assert_success(&run(&[
+        "jsonschema",
+        "--schema",
+        &schema,
+        "123456789012345678901234567890",
+    ])?);
+    for instance in [
+        "123456789012345678901234567889",
+        "123456789012345678901234567891",
+    ] {
+        let output = run(&["jsonschema", "--schema", &schema, instance])?;
+        assert_eq!(output.status.code(), Some(1));
+        assert!(text(&output.stdout)?.starts_with("\"\":"));
+    }
+    Ok(())
+}
+
+#[test]
+fn jsonschema_invalid_schemas_files_and_json_have_hints() -> Result<(), Box<dyn Error>> {
+    let files = ToolFiles::new()?;
+    for (name, contents) in [
+        ("malformed.json", "{"),
+        ("invalid.json", r#"{"type":123}"#),
+        (
+            "external.json",
+            r#"{"$ref":"https://example.invalid/schema.json"}"#,
+        ),
+        ("file-ref.json", r#"{"$ref":"file:///secret.json"}"#),
+        ("relative-ref.json", r#"{"$ref":"other.json"}"#),
+    ] {
+        let schema = files.write(name, contents)?;
+        assert_input_error(&run(&["jsonschema", "--schema", &schema, "{}"])?);
+    }
+    let invalid_utf8 = files.write("invalid-utf8.json", [0xff])?;
+    let huge = files.write("huge.json", vec![b' '; 1024 * 1024 + 1])?;
+    for schema in [files.path("missing.json"), invalid_utf8, huge] {
+        assert_input_error(&run(&["jsonschema", "--schema", &schema, "{}"])?);
+    }
+    let schema = files.write("good.json", "{}")?;
+    for instance in ["", "{oops}"] {
+        assert_input_error(&run(&["jsonschema", "--schema", &schema, instance])?);
+    }
+    Ok(())
+}
+
+#[test]
+fn new_tool_stdin_reads_enforce_size_and_utf8_limits() -> Result<(), Box<dyn Error>> {
+    let files = ToolFiles::new()?;
+    let schema = files.write("schema.json", "{}")?;
+    for args in [
+        vec!["base32", "encode", "-"],
+        vec!["base32", "decode", "-"],
+        vec!["headers", "-"],
+        vec!["qr", "-"],
+        vec!["jsonschema", "--schema", &schema, "-"],
+    ] {
+        assert_input_error(&run_stdin(&args, b"\xff")?);
+        let size = if args[0] == "qr" {
+            7090
+        } else {
+            1024 * 1024 + 1
+        };
+        let output = run_stdin(&args, &vec![b'a'; size])?;
+        assert_input_error(&output);
+        assert!(text(&output.stderr)?.contains("limit"));
+    }
     Ok(())
 }

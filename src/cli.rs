@@ -10,6 +10,11 @@ EXAMPLES:
       Pretty-print JSON (or pipe it: echo '{\"a\":1}' | devtoys json format).
   devtoys json get user.name '{\"user\":{\"name\":\"Ada\"}}'
   devtoys base64 encode --hex 48656c6c6f
+  devtoys base32 encode 'hello' --no-padding
+  devtoys headers 'Authorization: Bearer secret' --redact
+  devtoys diff3 --base base.txt --ours ours.txt --theirs theirs.txt
+  devtoys qr 'hello' --svg --output code.svg
+  devtoys jsonschema --schema schema.json '{\"name\":\"Ada\"}'
   devtoys case 'Hello world' --style kebab
   devtoys number 255 --to 16
   devtoys diff old.txt new.txt
@@ -46,6 +51,20 @@ pub struct Cli {
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
+    /// Encode or decode RFC 4648 Base32.
+    Base32 {
+        #[command(subcommand)]
+        command: Base32Command,
+    },
+    /// Inspect an HTTP header block offline (maximum 1 MiB).
+    Headers(HeadersArgs),
+    /// Merge three UTF-8 files; conflicts exit 1 and print conflict markers.
+    Diff3(Diff3Args),
+    /// Generate a QR code as terminal half blocks or SVG.
+    Qr(QrArgs),
+    /// Validate JSON against a local schema; external references are disabled.
+    #[command(name = "jsonschema")]
+    JsonSchema(JsonSchemaArgs),
     /// Format, minify and inspect JSON.
     Json {
         #[command(subcommand)]
@@ -182,6 +201,85 @@ pub enum CompletionShell {
     Fish,
     Powershell,
     Elvish,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum Base32Command {
+    /// Encode UTF-8 text as RFC 4648 Base32 (maximum 1 MiB).
+    Encode(Base32EncodeArgs),
+    /// Decode Base32 as UTF-8; accepts mixed case, whitespace and optional padding.
+    Decode(EncodingInputArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct Base32EncodeArgs {
+    /// Text input. Omit or use `-` to read stdin.
+    pub input: Option<String>,
+    /// Omit trailing padding.
+    #[arg(long)]
+    pub no_padding: bool,
+    /// Emit lowercase letters.
+    #[arg(long)]
+    pub lower: bool,
+}
+
+#[derive(Debug, Args)]
+pub struct HeadersArgs {
+    /// Header block. Omit or use `-` to read stdin.
+    pub input: Option<String>,
+    /// Hide authorization, cookies and X-Api-Key values.
+    #[arg(long)]
+    pub redact: bool,
+}
+
+#[derive(Debug, Args)]
+pub struct Diff3Args {
+    /// Common ancestor file (maximum 256 KiB / 10,000 lines).
+    #[arg(long, value_name = "PATH|-")]
+    pub base: PathBuf,
+    /// Our file; at most one input may be `-` for stdin.
+    #[arg(long, value_name = "PATH|-")]
+    pub ours: PathBuf,
+    /// Their file.
+    #[arg(long, value_name = "PATH|-")]
+    pub theirs: PathBuf,
+    /// Conflict label for the common ancestor.
+    #[arg(long, default_value = "base")]
+    pub label_base: String,
+    /// Conflict label for our file.
+    #[arg(long, default_value = "ours")]
+    pub label_ours: String,
+    /// Conflict label for their file.
+    #[arg(long, default_value = "theirs")]
+    pub label_theirs: String,
+}
+
+#[derive(Debug, Args)]
+pub struct QrArgs {
+    /// Text to encode. Omit or use `-` to read stdin.
+    pub input: Option<String>,
+    /// Error correction level (L, M, Q, H).
+    #[arg(long, default_value = "M", value_parser = ["L", "M", "Q", "H"], ignore_case = true)]
+    pub ecc: String,
+    /// Invert dark and light modules.
+    #[arg(long)]
+    pub invert: bool,
+    /// Emit SVG instead of terminal half blocks.
+    #[arg(long)]
+    pub svg: bool,
+    /// Write the selected format to this path instead of stdout.
+    #[arg(long, value_name = "PATH")]
+    pub output: Option<PathBuf>,
+}
+
+#[derive(Debug, Args)]
+pub struct JsonSchemaArgs {
+    /// Local UTF-8 JSON Schema file (maximum 1 MiB).
+    #[arg(long, value_name = "PATH")]
+    pub schema: PathBuf,
+    /// JSON instance (maximum 1 MiB). Omit or use `-` to read stdin.
+    #[arg(value_name = "JSON")]
+    pub input: Option<String>,
 }
 
 #[derive(Debug, Subcommand)]
