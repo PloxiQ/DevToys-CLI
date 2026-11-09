@@ -1,7 +1,7 @@
 # DevToys CLI
 
 <p align="center">
-  <img src="docs/assets/banner.png" alt="DevToys CLI — 45 offline developer tools in one tiny Rust binary" width="100%">
+  <img src="docs/assets/banner.png" alt="DevToys CLI — 51 offline developer tools in one tiny Rust binary" width="100%">
 </p>
 
 <p align="center">
@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <strong>45 everyday developer tools. One tiny Rust binary.</strong><br>
+  <strong>51 everyday developer tools. One tiny Rust binary.</strong><br>
   A keyboard-first TUI for exploring and a pipe-friendly CLI for scripting.<br>
   <sub>No accounts. No telemetry. No network calls. Just tools.</sub>
 </p>
@@ -31,7 +31,7 @@
 <p align="center">
   <img src="docs/assets/tui.png" alt="DevToys CLI TUI showing the tool sidebar, JSON input and formatted JSON output" width="100%">
 </p>
-<p align="center"><sub><strong>TUI</strong> — browse all 45 tools, edit input, and see results instantly. Press <code>?</code> for keyboard shortcuts.</sub></p>
+<p align="center"><sub><strong>TUI</strong> — browse all 51 tools, edit input, and see results instantly. Press <code>?</code> for keyboard shortcuts.</sub></p>
 
 <p align="center">
   <img src="docs/assets/cli.png" alt="DevToys CLI terminal session formatting JSON, explaining a cron schedule and testing a regex" width="860">
@@ -42,9 +42,9 @@
 <summary>Plain-text TUI preview</summary>
 
 ```text
-  DEVTOYS CLI  offline developer toolbox                    45 tools · zero network calls · v0.2.1
+  DEVTOYS CLI  offline developer toolbox                    51 tools · zero network calls · v0.2.1
   ───────────────────────────────────────────────────────────────────────────────────────────────
-┌ Tools 45─────────────────────┐  JSON Format  FORMAT & CONVERT
+┌ Tools 51─────────────────────┐  JSON Format  FORMAT & CONVERT
 │ FORMAT & CONVERT             │  Pretty-print JSON and preserve key order.
 │ › JSON Format                │┌ JSON input ────────────────────────────────────────────────────┐
 │   JSON Minify                ││{"name":"DevToys CLI","stars":1337,"offline":true,"tools":[...]}│
@@ -71,7 +71,7 @@
 │   Date to Timestamp          │
 │   Cron Explainer             │
 └──────────────────────────────┘
-  Up/Down navigate   Enter edit   ? help   q quit               45 tools · offline by design · MIT · v0.2.1
+  Up/Down navigate   Enter edit   ? help   q quit               51 tools · offline by design · MIT · v0.2.1
 ```
 
 </details>
@@ -186,11 +186,11 @@ The CLI's JSON highlighter only emits ANSI colors when stdout is an interactive 
 | `?` / `F1` | Open or close help |
 | `Ctrl+C` | Quit |
 
-Most tools run automatically as you type. Generators (UUID v4, UUID v7, File Hash, Lorem Ipsum, Random String, Password) run when you press `Enter`.
+Most tools run automatically as you type. UUID v4, UUID v7, File Hash, Lorem Ipsum, Random String, Password, Three-Way Merge, QR Code and JSON Schema run when you press `Enter` after editing. In HTTP Headers, use `Tab` to select Redact, then `Space` or the arrow keys to toggle it. QR Code uses the same controls to select its ECC level. Three-Way Merge has three path fields; `Tab` cycles through Base, Ours and Theirs.
 
 ## Tool reference
 
-The TUI and CLI share the same implementations. Every command that takes text accepts stdin (omit the argument or pass `-`).
+The TUI and CLI share the same implementations. Every command that takes text accepts stdin (omit the argument or pass `-`). File-based commands use explicit path flags; `diff3` accepts `-` for at most one of its three paths. The 51 TUI entries include separate Base32 encode and decode tools.
 
 ### Format & Convert
 
@@ -204,6 +204,8 @@ The TUI and CLI share the same implementations. Every command that takes text ac
 | Number base | Number Base | `devtoys number [INPUT] [--from 2-36] [--to 2-36] [--upper]` |
 | Byte size | Byte Size | `devtoys bytes [INPUT] [--binary]` |
 | Color converter | Color Converter | `devtoys color [COLOR]` |
+| Base32 encode | Base32 Encode | `devtoys base32 encode [INPUT] [--no-padding] [--lower]` |
+| Base32 decode | Base32 Decode | `devtoys base32 decode [INPUT]` |
 | Base64 encode | Base64 Encode | `devtoys base64 encode [INPUT] [--url-safe]` |
 | Base64 decode | Base64 Decode | `devtoys base64 decode [INPUT]` |
 | Base64 encode (HEX) | Base64 Encode HEX | `devtoys base64 encode --hex [INPUT] [--url-safe]` |
@@ -222,6 +224,7 @@ The TUI and CLI share the same implementations. Every command that takes text ac
 | Tool | TUI entry | CLI command |
 | --- | --- | --- |
 | Case converter | Case Converter | `devtoys case [INPUT] [-s STYLE]` |
+| Three-way file merge | Three-Way Merge | `devtoys diff3 --base PATH --ours PATH --theirs PATH [--label-base LABEL] [--label-ours LABEL] [--label-theirs LABEL]` |
 | Text diff | Text Diff | `devtoys diff [LEFT] [RIGHT] [-c N] [--left-file PATH] [--right-file PATH]` |
 | Text statistics | Text Statistics | `devtoys text stats [INPUT]` |
 | Line sorter | Line Sorter | `devtoys text sort [INPUT] [-r] [-u] [--ignore-case] [--trim]` |
@@ -257,6 +260,9 @@ The TUI and CLI share the same implementations. Every command that takes text ac
 | Tool | TUI entry | CLI command |
 | --- | --- | --- |
 | JWT decoder | JWT Decoder | `devtoys jwt decode [TOKEN] [--part PART]` |
+| HTTP header parser | HTTP Headers | `devtoys headers [INPUT] [--redact]` |
+| JSON Schema validator | JSON Schema | `devtoys jsonschema --schema PATH [JSON]` |
+| QR generator | QR Code | `devtoys qr [INPUT] [--ecc LEVEL] [--invert] [--svg] [--output PATH]` |
 | Regex tester | Regex Tester | `devtoys regex test PATTERN [TEXT] [-i] [-m] [-s] [-r REPLACEMENT]` |
 | URL parser | URL Parser | `devtoys url parse [URL]` |
 | HTTP status | HTTP Status | `devtoys http CODE`, `devtoys http --class N` or `devtoys http --list` |
@@ -323,6 +329,23 @@ git show HEAD~1:README.md > old.md && devtoys diff --left-file old.md --right-fi
 
 Text statistics count characters, words, sentences, paragraphs, lines, bytes, longest line and estimated reading time. The diff output is unified format and compares line by line.
 
+### Three-way merge
+
+```bash
+printf 'one\ntwo\nthree\n' > base.txt
+printf 'ONE\ntwo\nthree\n' > ours.txt
+printf 'one\ntwo\nTHREE\n' > theirs.txt
+devtoys diff3 --base base.txt --ours ours.txt --theirs theirs.txt
+
+cat base.txt | devtoys diff3 --base - --ours ours.txt --theirs theirs.txt
+devtoys diff3 --base base.txt --ours ours.txt --theirs theirs.txt \
+  --label-base ancestor --label-ours local --label-theirs remote
+```
+
+`diff3` reads UTF-8 files and merges changes relative to the common ancestor. Non-overlapping changes merge cleanly with exit code 0. Overlapping changes print `<<<<<<<`, `|||||||`, `=======` and `>>>>>>>` conflict markers and exit 1. Stdout contains only the merged text, so it can be redirected to a file; clean merges preserve CRLF and missing final newlines without appending a status message or newline. Conflict markers start on separate lines even when an input lacks its final newline.
+
+At most one of `--base`, `--ours` and `--theirs` may be `-` for stdin. Each input is limited to 256 KiB and 10,000 lines, and the merge result is limited to 8 MiB. Labels default to `base`, `ours` and `theirs`; custom labels accept up to 128 UTF-8 bytes without control characters. The TUI accepts three file paths and displays the merge or conflict in its output pane.
+
 ### Encoding
 
 ```bash
@@ -340,6 +363,59 @@ devtoys base64 encode --url-safe 'Hello'
 ```
 
 Hex input accepts whitespace, `:`, `-`, `_` and an optional `0x` prefix. HTML decoding supports common named entities plus decimal and hexadecimal numeric entities.
+
+### Base32
+
+```bash
+devtoys base32 encode 'foobar'
+devtoys base32 encode 'foobar' --no-padding --lower
+devtoys base32 decode 'MZXW6YTBOI======'
+printf 'mzxw6ytboi' | devtoys base32 decode -
+```
+
+Base32 uses the RFC 4648 alphabet (`A-Z`, `2-7`), with uppercase letters and padding by default. Decoding accepts mixed case, ASCII whitespace and either complete padding or none. Invalid characters, incomplete padding and non-zero trailing bits produce an error with a hint. Both directions operate on UTF-8 text and accept at most 1 MiB of input, including whitespace and padding when decoding.
+
+### QR codes
+
+```bash
+devtoys qr 'Hello, DevToys!'
+devtoys qr 'Привіт 🌍' --ecc H
+devtoys qr 'hello' --invert
+devtoys qr 'hello' --svg
+devtoys qr 'hello' --ecc Q --svg --output code.svg
+printf 'hello' | devtoys qr - --output code.txt
+```
+
+Terminal QR output uses Unicode half blocks with a four-module quiet zone on every side. ECC accepts `L`, `M` (default), `Q` or `H`; stronger error correction leaves less space for data. Empty input and data that exceeds the selected ECC capacity are rejected. Inputs are also capped at 7,089 UTF-8 bytes. `--invert` swaps dark and light modules. `--svg` emits SVG, and `--output` writes the selected format to a local file instead of stdout.
+
+Terminal scanning depends on the font, foreground/background colors and available space. Choose inversion to suit the terminal theme, or use SVG for predictable colors and scaling. The TUI renders QR output with black modules on white and asks for a larger terminal if the full code will not fit. It supports text and ECC selection; SVG export, inversion and file output are CLI options. No PNG/image encoder is included.
+
+### HTTP headers
+
+```bash
+devtoys headers 'GET / HTTP/1.1
+host: example.com
+accept: application/json'
+
+printf 'HTTP/1.1 200 OK\r\nset-cookie: a=1\r\nset-cookie: b=2\r\n' | devtoys headers - --redact
+devtoys headers 'Authorization: Bearer example' --redact
+```
+
+The parser accepts an optional request or status line followed by `Name: value` lines, using LF or CRLF. It preserves duplicate headers and their order, canonicalizes names to Title-Case and trims spaces/tabs around values. Output uses LF. `--redact` replaces Authorization, Proxy-Authorization, Cookie, Set-Cookie and X-Api-Key values with `[redacted]`, including duplicates.
+
+Input is limited to 1 MiB. Empty input, malformed names/lines, obsolete folded continuation lines and body content after the header block produce errors with hints; malformed-line errors include the line number. This tool inspects pasted text locally and never sends a request.
+
+### JSON Schema validation
+
+```bash
+printf '%s\n' '{"type":"object","required":["name"],"properties":{"name":{"type":"string"}}}' > schema.json
+devtoys jsonschema --schema schema.json '{"name":"Ada"}'
+printf '%s' '{"name":42}' | devtoys jsonschema --schema schema.json -
+```
+
+A valid instance prints `Valid.` and exits 0. Validation failures print a list of errors with JSON Pointer instance paths and exit 1. Paths are JSON-quoted, so `""` identifies the root and `"/items/0"` identifies the first array item. Schema and instance numbers retain arbitrary precision. Internal references such as `#/$defs/person` work; external resources, including HTTP and file references, are disabled. Invalid schemas and unreadable schema files produce friendly errors with hints.
+
+Schema and instance input are each limited to 1 MiB and the JSON parser's nesting limit. Output lists at most 100 validation errors, followed by an omission notice when more remain. The TUI takes pasted schema JSON and an instance in separate fields; the CLI reads the schema from `--schema PATH`. Validation and reference resolution run entirely offline.
 
 ### Base64 and URL
 
@@ -485,12 +561,12 @@ printf 'hello' | devtoys base64 encode
 
 ## Roadmap
 
-- [x] 45 offline tools with both TUI and CLI
+- [x] 51 offline tools with both TUI and CLI
 - [x] Converters, text utilities, encodings, CSV/JSON, web/network and security helpers
 - [x] Automated Windows, Linux and macOS releases
 - [ ] Publish `devtoys-cli` to crates.io
 - [ ] Scoop, Winget and Homebrew packages
-- [ ] More tools: diff3, JSON Schema validation, HTTP header parser, QR codes
+- [x] Base32, three-way merge, JSON Schema validation, HTTP header parsing and QR codes
 
 ## Project structure
 
@@ -508,8 +584,14 @@ DevToys-CLI/
 │   │   ├── case.rs      # naming-convention conversion
 │   │   ├── text.rs      # statistics, sorting, dedupe, slugify
 │   │   ├── diff.rs      # unified line diff
+│   │   ├── diff3.rs     # bounded three-way file merge
 │   │   ├── encoding.rs  # hex, binary and HTML entities
 │   │   ├── base64.rs    # standard and URL-safe Base64
+│   │   ├── base32.rs    # RFC 4648 Base32
+│   │   ├── headers.rs   # HTTP header parsing and redaction
+│   │   ├── jsonschema.rs # offline JSON Schema validation
+│   │   ├── qr.rs        # terminal and SVG QR codes
+│   │   ├── limits.rs    # bounded UTF-8 file and stream input
 │   │   ├── url.rs       # percent coding and URL parsing
 │   │   ├── number.rs    # base and byte-size conversion
 │   │   ├── color.rs     # CSS color parsing and contrast
@@ -580,7 +662,7 @@ In `src/tui/app.rs`:
 1. Add a `ToolId` variant.
 2. Add a `ToolDef` to `TOOLS` with a name, group, description, sample input and `auto_run` setting.
 3. Handle the new `ToolId` in `run_tool`.
-4. If the tool needs two fields, give it a `secondary` field and handle `Focus::Secondary`.
+4. If the tool needs two fields, give it a `secondary` field and handle `Focus::Secondary`. A third field uses `tertiary` and `Focus::Tertiary`.
 
 The sidebar, keyboard navigation, help overlay and rendering are generated from `TOOLS`, so no UI changes are usually needed.
 

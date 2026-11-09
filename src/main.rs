@@ -7,8 +7,8 @@ use chrono::{SecondsFormat, Utc};
 use clap::Parser;
 
 use devtoys_cli::cli::{
-    Base64Command, BinaryCommand, BytesArgs, CaseArgs, CharsetArg, Cli, ColorArgs, Command,
-    CsvCommand, DiffArgs, HashAlgorithm, HexCommand, HmacAlgorithm, HmacArgs, HtmlCommand,
+    Base32Command, Base64Command, BinaryCommand, BytesArgs, CaseArgs, CharsetArg, Cli, ColorArgs,
+    Command, CsvCommand, DiffArgs, HashAlgorithm, HexCommand, HmacAlgorithm, HmacArgs, HtmlCommand,
     HttpArgs, IpArgs, JsonCommand, JwtCommand, JwtPart, MimeArgs, NumberArgs, RegexCommand,
     TextCommand, TimestampCommand,
 };
@@ -17,16 +17,16 @@ use devtoys_cli::style;
 use devtoys_cli::tools::hash::Algorithm;
 use devtoys_cli::tools::random::Charset;
 use devtoys_cli::tools::{
-    base64 as base64_tool, case as case_tool, color, cron::CronSchedule, csv as csv_tool, diff,
-    encoding, hash, hmac, http, ip, json, jwt, lorem, mime, number, random, regex as regex_tool,
-    text, timestamp, url, uuid,
+    base32, base64 as base64_tool, case as case_tool, color, cron::CronSchedule, csv as csv_tool,
+    diff, diff3, encoding, hash, headers, hmac, http, ip, json, jsonschema, jwt, limits, lorem,
+    mime, number, qr, random, regex as regex_tool, text, timestamp, url, uuid,
 };
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
     let no_color = cli.no_color;
     match run(cli) {
-        Ok(()) => ExitCode::SUCCESS,
+        Ok(code) => code,
         Err(error) => {
             report_error(&error, error_color_enabled(no_color));
             ExitCode::FAILURE
@@ -34,10 +34,47 @@ fn main() -> ExitCode {
     }
 }
 
-fn run(cli: Cli) -> Result<()> {
+fn run(cli: Cli) -> Result<ExitCode> {
     let color = stdout_color_enabled(cli.no_color);
 
     match cli.command {
+        Some(Command::Base32 { command }) => run_base32(command),
+        Some(Command::Headers(args)) => {
+            let input = bounded_input(
+                args.input,
+                headers::MAX_INPUT,
+                "devtoys headers 'Host: example.com'",
+            )?;
+            emit(&headers::parse(&input, args.redact)?)
+        }
+        Some(Command::Diff3(args)) => return run_diff3(args),
+        Some(Command::Qr(args)) => {
+            let input = bounded_input(args.input, qr::MAX_INPUT, "devtoys qr 'hello'")?;
+            let output = qr::generate(&input, &args.ecc, args.invert, args.svg)?;
+            if let Some(path) = args.output {
+                std::fs::write(&path, output).map_err(|error| {
+                    ToolError::new(format!("Could not write `{}`: {error}.", path.display()))
+                        .with_hint("Choose a writable file path in an existing directory.")
+                })
+            } else {
+                emit_exact(&output)
+            }
+        }
+        Some(Command::JsonSchema(args)) => {
+            let schema = limits::read_file(&args.schema, jsonschema::MAX_INPUT)?;
+            let input = bounded_input(
+                args.input,
+                jsonschema::MAX_INPUT,
+                "devtoys jsonschema --schema schema.json '{}'",
+            )?;
+            let report = jsonschema::validate(&schema, &input)?;
+            emit(&report.text)?;
+            return Ok(if report.valid {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::FAILURE
+            });
+        }
         None => launch_tui(),
         Some(Command::Tui) => launch_tui(),
         Some(Command::Json { command }) => run_json(command, color),
@@ -123,6 +160,81 @@ fn run(cli: Cli) -> Result<()> {
         }
         Some(Command::Jwt { command }) => run_jwt(command, color),
         Some(Command::Regex { command }) => run_regex(command, color),
+    }
+    .map(|()| ExitCode::SUCCESS)
+}
+
+fn run_base32(command: Base32Command) -> Result<()> {
+    let output = match command {
+        Base32Command::Encode(args) => {
+            let input = bounded_input(
+                args.input,
+                base32::MAX_INPUT,
+                "devtoys base32 encode 'hello'",
+            )?;
+            base32::encode(&input, !args.no_padding, args.lower)?
+        }
+        Base32Command::Decode(args) => {
+            let input = bounded_input(
+                args.input,
+                base32::MAX_INPUT,
+                "devtoys base32 decode NBSWY3DP",
+            )?;
+            base32::decode(&input)?
+        }
+    };
+    emit(&output)
+}
+
+fn run_diff3(args: devtoys_cli::cli::Diff3Args) -> Result<ExitCode> {
+    let paths = [&args.base, &args.ours, &args.theirs];
+    if paths.iter().filter(|p| p.as_os_str() == "-").count() > 1 {
+        return Err(ToolError::new("Only one diff3 input may come from stdin.")
+            .with_hint("Use a file path for the other two inputs."));
+    }
+    let read = |path: &std::path::Path| {
+        if path.as_os_str() == "-" {
+            limits::read(io::stdin().lock(), diff3::MAX_INPUT, "stdin")
+        } else {
+            limits::read_file(path, diff3::MAX_INPUT)
+        }
+    };
+    let result = diff3::merge(
+        &read(&args.base)?,
+        &read(&args.ours)?,
+        &read(&args.theirs)?,
+        [&args.label_base, &args.label_ours, &args.label_theirs],
+    )?;
+    emit_exact(&result.text)?;
+    Ok(if result.conflicted {
+        ExitCode::FAILURE
+    } else {
+        ExitCode::SUCCESS
+    })
+}
+
+fn bounded_input(value: Option<String>, limit: usize, example: &str) -> Result<String> {
+    match value {
+        Some(value) if value != "-" => {
+            limits::check(&value, limit, "Input")?;
+            Ok(value)
+        }
+        None if io::stdin().is_terminal() => Err(ToolError::new("No input provided.")
+            .with_hint(format!("Pass text or pipe stdin. Example: {example}"))),
+        _ => limits::read(io::stdin().lock(), limit, "stdin"),
+    }
+}
+
+fn emit_exact(text: &str) -> Result<()> {
+    let mut stdout = io::stdout().lock();
+    match stdout
+        .write_all(text.as_bytes())
+        .and_then(|()| stdout.flush())
+    {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == io::ErrorKind::BrokenPipe => Ok(()),
+        Err(error) => Err(ToolError::new(format!("Could not write stdout: {error}."))
+            .with_hint("Check the output destination.")),
     }
 }
 

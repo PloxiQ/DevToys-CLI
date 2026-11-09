@@ -7,7 +7,7 @@ use ratatui::widgets::{Block, Borders, Clear, Paragraph, Wrap};
 use ratatui::Frame;
 use unicode_width::UnicodeWidthChar;
 
-use crate::tui::app::{App, Focus, SidebarRow, ToolState, TOOLS};
+use crate::tui::app::{App, Focus, SidebarRow, ToolId, ToolState, TOOLS};
 
 const BG: Color = Color::Rgb(13, 17, 23);
 const PANEL: Color = Color::Rgb(22, 27, 34);
@@ -155,11 +155,13 @@ fn draw_main(frame: &mut Frame, area: Rect, app: &App) {
     let tool = app.current_tool();
     let state = app.current_state();
     let secondary_height = if tool.secondary.is_some() { 5 } else { 0 };
+    let tertiary_height = if tool.tertiary.is_some() { 3 } else { 0 };
 
     let chunks = Layout::vertical([
         Constraint::Length(2),
         Constraint::Percentage(35),
         Constraint::Length(secondary_height),
+        Constraint::Length(tertiary_height),
         Constraint::Min(5),
     ])
     .split(area);
@@ -205,7 +207,25 @@ fn draw_main(frame: &mut Frame, area: Rect, app: &App) {
         );
     }
 
-    draw_output(frame, chunks[3], state, tool.auto_run);
+    if let Some(tertiary) = tool.tertiary {
+        draw_editor(
+            frame,
+            chunks[3],
+            tertiary.label,
+            tertiary.placeholder,
+            &state.tertiary,
+            state.tertiary_cursor,
+            app.focus() == Focus::Tertiary,
+        );
+    }
+
+    draw_output(
+        frame,
+        chunks[4],
+        state,
+        tool.auto_run,
+        tool.id == ToolId::Qr,
+    );
 }
 
 fn draw_editor(
@@ -285,13 +305,15 @@ fn draw_editor(
     frame.set_cursor_position(Position::new(x, y));
 }
 
-fn draw_output(frame: &mut Frame, area: Rect, state: &ToolState, auto_run: bool) {
+fn draw_output(frame: &mut Frame, area: Rect, state: &ToolState, auto_run: bool, qr: bool) {
     if area.height < 3 || area.width < 4 {
         return;
     }
 
     let (badge, color) = if state.error.is_some() {
         ("ERROR", RED)
+    } else if let Some(outcome) = state.outcome {
+        (outcome, YELLOW)
     } else if state.output.is_empty() {
         ("IDLE", MUTED)
     } else {
@@ -354,12 +376,31 @@ fn draw_output(frame: &mut Frame, area: Rect, state: &ToolState, auto_run: bool)
             .collect()
     };
 
-    frame.render_widget(
-        Paragraph::new(lines)
-            .wrap(Wrap { trim: false })
-            .scroll((state.output_scroll, 0)),
-        inner,
-    );
+    if qr && state.error.is_none() && !state.output.is_empty() {
+        // Never wrap QR rows: clipping is preferable to silently changing the matrix.
+        let width = state
+            .output
+            .lines()
+            .next()
+            .map_or(0, |line| line.chars().count());
+        let rows = state.output.lines().count();
+        if width > usize::from(inner.width) || rows > usize::from(inner.height) {
+            frame.render_widget(Paragraph::new("Enlarge the terminal to view the full QR code, or use `devtoys qr --svg --output code.svg`."), inner);
+        } else {
+            frame.render_widget(
+                Paragraph::new(state.output.as_str())
+                    .style(Style::default().fg(Color::Black).bg(Color::White)),
+                inner,
+            );
+        }
+    } else {
+        frame.render_widget(
+            Paragraph::new(lines)
+                .wrap(Wrap { trim: false })
+                .scroll((state.output_scroll, 0)),
+            inner,
+        );
+    }
 }
 
 fn draw_footer(frame: &mut Frame, area: Rect, app: &App) {
@@ -378,7 +419,7 @@ fn draw_footer(frame: &mut Frame, area: Rect, app: &App) {
     } else {
         match app.focus() {
             Focus::Sidebar => " Up/Down navigate   Enter edit   ? help   q quit",
-            Focus::Primary | Focus::Secondary => {
+            Focus::Primary | Focus::Secondary | Focus::Tertiary => {
                 " Enter run   Tab switch field   Ctrl+J newline   PgUp/PgDn scroll   Esc tools"
             }
         }
@@ -548,6 +589,48 @@ mod tests {
         assert!(regex.contains("Regex Tester"));
         assert!(regex.contains("Test string"));
         assert!(regex.contains("Matches: 2"));
+        Ok(())
+    }
+
+    #[test]
+    fn renders_all_new_forms_at_different_sizes() -> Result<(), Box<dyn std::error::Error>> {
+        for id in [
+            ToolId::Base32Encode,
+            ToolId::Base32Decode,
+            ToolId::Headers,
+            ToolId::Diff3,
+            ToolId::Qr,
+            ToolId::JsonSchema,
+        ] {
+            let mut app = App::new();
+            for _ in 0..crate::tui::app::TOOLS.len() {
+                if app.current_tool().id == id {
+                    break;
+                }
+                app.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+            }
+            assert_eq!(app.current_tool().id, id);
+            for (width, height) in [(120, 50), (80, 24), (30, 10), (1, 1)] {
+                let mut terminal = Terminal::new(TestBackend::new(width, height))?;
+                terminal.draw(|frame| draw(frame, &mut app))?;
+                if width == 120 {
+                    let screen = terminal
+                        .backend()
+                        .buffer()
+                        .content
+                        .iter()
+                        .map(|cell| cell.symbol())
+                        .collect::<String>();
+                    assert!(screen.contains(app.current_tool().name));
+                    if id == ToolId::Diff3 {
+                        assert!(screen.contains("Theirs path"));
+                    }
+                    if id == ToolId::Qr {
+                        assert!(screen.contains('█') || screen.contains('▀'));
+                    }
+                }
+            }
+        }
         Ok(())
     }
 }
